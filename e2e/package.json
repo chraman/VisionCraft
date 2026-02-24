@@ -1,0 +1,18 @@
+{
+  "name": "@ai-platform/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:chromium": "playwright test --project=chromium",
+    "lint": "echo \"No linting for e2e\"",
+    "typecheck": "tsc --noEmit",
+    "build": "echo \"No build for e2e\""
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.2"
+  }
+}

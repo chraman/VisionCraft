@@ -1,0 +1,7 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+  - "services/*"
+  - "workers/*"
+  - "infra/scripts"
+  - "e2e"

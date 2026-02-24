@@ -1,0 +1,26 @@
+{
+  "name": "@ai-platform/api-client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "eslint src",
+    "typecheck": "tsc --noEmit",
+    "test": "jest --passWithNoTests",
+    "generate:api-client": "echo \"API client generation â€” OpenAPI spec required\""
+  },
+  "dependencies": {
+    "axios": "^1.7.9"
+  },
+  "devDependencies": {
+    "@ai-platform/types": "workspace:*",
+    "@types/axios": "*",
+    "typescript": "^5.7.2"
+  }
+}

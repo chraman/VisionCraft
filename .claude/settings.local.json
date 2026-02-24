@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(echo pnpm not found:*)",
+      "Bash(cd /c/Projects/VisionCraft && pnpm install 2>&1)",
+      "Bash(true:*)",
+      "Bash(cd /c/Projects/VisionCraft && pnpm turbo typecheck 2>&1)",
+      "Bash(python3:*)",
+      "Bash(grep:*)",
+      "Bash(tail:*)",
+      "Bash(cd /c/Projects/VisionCraft && sleep 3 && docker-compose ps 2>&1)",
+      "Bash(cd /c/Projects/VisionCraft && docker-compose up -d --force-recreate ai-service 2>&1 && sleep 5 && docker-compose ps ai-service 2>&1)",
+      "Bash(cd /c/Projects/VisionCraft/services/image-service && pnpm prisma migrate dev --name initial_schema 2>&1)",
+      "Bash(cd /c/Projects/VisionCraft/infra/scripts && DATABASE_URL=\"postgresql://postgres:postgres@localhost:5432/aiplatform\" pnpm seed 2>&1)",
+      "Bash(grep Tasks::*)"
+    ]
+  }
+}
