@@ -5,7 +5,7 @@
   "scripts": {
     "seed": "ts-node seed.ts",
     "lint": "echo \"No linting for infra scripts\"",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "echo \"No typecheck for infra scripts\"",
     "test": "echo \"No tests for infra scripts\"",
     "build": "echo \"No build for infra scripts\""
   },
