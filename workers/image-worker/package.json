@@ -14,12 +14,12 @@
     "@ai-platform/config": "workspace:*",
     "@ai-platform/types": "workspace:*",
     "@ai-platform/utils": "workspace:*",
-    "@aws-sdk/client-s3": "^3.726.1",
-    "@prisma/client": "^6.2.1",
-    "axios": "^1.7.9",
-    "bullmq": "^5.33.1",
-    "ioredis": "^5.4.1",
-    "zod": "^3.24.1"
+    "@aws-sdk/client-s3": "^3.1008.0",
+    "@prisma/client": "^7.5.0",
+    "axios": "^1.13.6",
+    "bullmq": "^5.71.0",
+    "ioredis": "^5.10.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",
