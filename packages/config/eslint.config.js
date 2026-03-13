@@ -30,12 +30,4 @@ export const baseConfig = [
 ];
 
 /** @type {import("eslint").Linter.Config[]} */
-export const reactConfig = [
-  ...baseConfig,
-  {
-    files: ['**/*.tsx'],
-    rules: {
-      'react/react-in-jsx-scope': 'off',
-    },
-  },
-];
+export const reactConfig = [...baseConfig];

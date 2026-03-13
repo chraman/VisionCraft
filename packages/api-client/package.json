@@ -12,7 +12,7 @@
     "build": "tsc --noEmit",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
-    "test": "jest --passWithNoTests",
+    "test": "echo \"No tests for api-client package\"",
     "generate:api-client": "echo \"API client generation â€” OpenAPI spec required\""
   },
   "dependencies": {

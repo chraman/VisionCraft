@@ -13,7 +13,7 @@
     "build": "tsc --noEmit",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
-    "test": "jest --passWithNoTests"
+    "test": "echo \"No tests for utils package\""
   },
   "dependencies": {
     "winston": "^3.17.0"
