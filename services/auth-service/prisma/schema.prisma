@@ -1,0 +1,321 @@
+// Prisma schema — Auth Service
+// Shared database — auth-service owns User, AuthToken, AuditLog tables.
+// See CLAUDE.md §7 for conventions.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum UserTier {
+  free
+  pro
+  enterprise
+}
+
+enum UserRole {
+  user
+  admin
+}
+
+enum JobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum GenerationJobType {
+  TEXT2IMG
+  IMG2IMG
+  UPSCALE
+  INPAINT
+  VIDEO
+}
+
+enum AuditAction {
+  LOGIN
+  LOGOUT
+  FAILED_LOGIN
+  OAUTH_LOGIN
+  REGISTER
+  EMAIL_VERIFIED
+  TWO_FA_ENABLED
+  TWO_FA_DISABLED
+  PASSWORD_CHANGED
+  ACCOUNT_LOCKED
+  ACCOUNT_UNLOCKED
+  TOKEN_REVOKED
+  TOKEN_FAMILY_REVOKED
+  IMAGE_GENERATED
+  IMAGE_DELETED
+  COLLECTION_CREATED
+}
+
+// ─── Users ────────────────────────────────────────────────────────────────────
+
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  emailVerifiedAt DateTime?
+  passwordHash    String?
+  name            String?
+  avatarUrl       String?
+  role            UserRole  @default(user)
+  tier            UserTier  @default(free)
+  isTwoFactorEnabled Boolean @default(false)
+  totpSecret      String?
+
+  generationsThisMonth Int      @default(0)
+  quotaResetAt         DateTime @default(now())
+
+  credits    Int?
+  teamId     String?
+  isPublic   Boolean @default(false)
+  apiKeyHash String?
+
+  version  Int   @default(1)
+  metadata Json?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  authTokens      AuthToken[]
+  auditLogs       AuditLog[]
+  images          Image[]
+  generationJobs  GenerationJob[]
+  savedImages     SavedImage[]
+  collections     Collection[]
+  analyticsEvents AnalyticsEvent[]
+
+  @@index([email])
+  @@index([tier])
+  @@index([deletedAt])
+  @@map("users")
+}
+
+// ─── Auth Tokens ──────────────────────────────────────────────────────────────
+
+model AuthToken {
+  id        String    @id @default(cuid())
+  userId    String
+  jti       String    @unique
+  family    String
+  expiresAt DateTime
+  revokedAt DateTime?
+
+  version  Int   @default(1)
+  metadata Json?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([family])
+  @@index([expiresAt])
+  @@map("auth_tokens")
+}
+
+// ─── Audit Log ────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id        String      @id @default(cuid())
+  userId    String?
+  action    AuditAction
+  ipAddress String?
+  userAgent String?
+  details   Json?
+
+  version  Int   @default(1)
+  metadata Json?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ─── Stub models (owned by other services — referenced for FK integrity) ──────
+
+model Image {
+  id             String  @id @default(cuid())
+  userId         String
+  jobId          String  @unique
+  url            String
+  cdnUrl         String?
+  prompt         String
+  negativePrompt String?
+  model          String
+  provider       String
+  isSaved        Boolean @default(false)
+  stylePreset    String?
+  seed           Int?
+  width          Int?
+  height         Int?
+  collectionId   String?
+
+  version  Int   @default(1)
+  metadata Json?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  user        User          @relation(fields: [userId], references: [id])
+  job         GenerationJob @relation(fields: [jobId], references: [id])
+  savedImages SavedImage[]
+  collection  Collection?   @relation(fields: [collectionId], references: [id])
+
+  @@index([userId])
+  @@map("images")
+}
+
+model GenerationJob {
+  id             String            @id @default(cuid())
+  userId         String
+  type           GenerationJobType @default(TEXT2IMG)
+  status         JobStatus         @default(PENDING)
+  prompt         String
+  negativePrompt String?
+  model          String            @default("sdxl")
+  aspectRatio    String            @default("1:1")
+  quality        String            @default("standard")
+  errorMessage   String?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  batchId        String?
+  parentJobId    String?
+
+  version  Int   @default(1)
+  metadata Json?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  user  User   @relation(fields: [userId], references: [id])
+  image Image?
+
+  @@index([userId])
+  @@map("generation_jobs")
+}
+
+model Collection {
+  id          String  @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  imageCount  Int     @default(0)
+
+  version  Int   @default(1)
+  metadata Json?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  user        User         @relation(fields: [userId], references: [id])
+  images      Image[]
+  savedImages SavedImage[]
+
+  @@index([userId])
+  @@map("collections")
+}
+
+model SavedImage {
+  id           String  @id @default(cuid())
+  userId       String
+  imageId      String
+  collectionId String?
+
+  version  Int   @default(1)
+  metadata Json?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  user       User        @relation(fields: [userId], references: [id])
+  image      Image       @relation(fields: [imageId], references: [id])
+  collection Collection? @relation(fields: [collectionId], references: [id])
+
+  @@unique([userId, imageId])
+  @@index([userId])
+  @@map("saved_images")
+}
+
+model Team {
+  id          String  @id @default(cuid())
+  name        String
+  slug        String  @unique
+  ownerId     String
+  description String?
+  avatarUrl   String?
+
+  version  Int   @default(1)
+  metadata Json?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@map("teams")
+}
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  userId     String
+  name       String
+  keyHash    String    @unique
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  revokedAt  DateTime?
+
+  version  Int   @default(1)
+  metadata Json?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([userId])
+  @@map("api_keys")
+}
+
+model AnalyticsEvent {
+  id         String  @id @default(cuid())
+  userId     String?
+  event      String
+  sessionId  String?
+  properties Json?
+  ipAddress  String?
+  userAgent  String?
+
+  version  Int   @default(1)
+  metadata Json?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("analytics_events")
+}
