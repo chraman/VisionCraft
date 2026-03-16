@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { getErrorMessage } from '@ai-platform/utils';
+import { getErrorMessage } from '../../../lib/errors';
 import { saveImage, deleteImage } from '../../../services/image.service';
 import { track } from '../../../lib/analytics';
 import { useAuthStore } from '@ai-platform/store';

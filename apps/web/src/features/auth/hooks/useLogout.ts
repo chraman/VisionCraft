@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { setAccessToken } from '@ai-platform/api-client';
 import { useAuthStore } from '@ai-platform/store';
-import { getErrorMessage } from '@ai-platform/utils';
+import { getErrorMessage } from '../../../lib/errors';
 import { queryClient } from '../../../lib/queryClient';
 import { logout } from '../../../services/auth.service';
 import { resetAnalyticsUser } from '../../../lib/analytics';

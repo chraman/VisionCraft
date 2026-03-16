@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { getErrorMessage } from '@ai-platform/utils';
+import { getErrorMessage } from '../../../lib/errors';
 import type { GenerateTextRequest } from '@ai-platform/types';
 import { generateFromText } from '../../../services/image.service';
 import { track } from '../../../lib/analytics';

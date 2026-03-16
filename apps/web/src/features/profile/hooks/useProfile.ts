@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { getErrorMessage } from '@ai-platform/utils';
+import { getErrorMessage } from '../../../lib/errors';
 import { getCurrentUser, updateProfile } from '../../../services/user.service';
 import type { User } from '@ai-platform/types';
 
