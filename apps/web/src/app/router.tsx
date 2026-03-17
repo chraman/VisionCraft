@@ -8,6 +8,7 @@ import AuthLayout from '../layouts/AuthLayout';
 const HomePage = lazy(() => import('../pages/HomePage'));
 const LoginPage = lazy(() => import('../features/auth/pages/LoginPage'));
 const RegisterPage = lazy(() => import('../features/auth/pages/RegisterPage'));
+const OAuthCallbackPage = lazy(() => import('../features/auth/pages/OAuthCallbackPage'));
 const GeneratePage = lazy(() => import('../features/generate/pages/GeneratePage'));
 const GalleryPage = lazy(() => import('../features/gallery/pages/GalleryPage'));
 const ProfilePage = lazy(() => import('../features/profile/pages/ProfilePage'));
@@ -32,6 +33,11 @@ export const router = createBrowserRouter([
     path: '/register',
     element: <AuthLayout />,
     children: [{ index: true, element: withSuspense(<RegisterPage />) }],
+  },
+  {
+    // Google OAuth redirect lands here — no layout, just processes token and navigates
+    path: '/auth/callback',
+    element: withSuspense(<OAuthCallbackPage />),
   },
   // Authenticated app
   {

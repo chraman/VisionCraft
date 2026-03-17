@@ -66,4 +66,59 @@ export const userRepository = {
     });
     return count > 0;
   },
+
+  async findOrCreateOAuthUser(data: {
+    oauthProvider: string;
+    oauthProviderId: string;
+    email: string;
+    name?: string;
+    avatarUrl?: string;
+  }): Promise<User> {
+    const email = data.email.toLowerCase();
+
+    // 1. Find by provider + provider ID (returning user)
+    const byProvider = await prisma.user.findFirst({
+      where: {
+        oauthProvider: data.oauthProvider,
+        oauthProviderId: data.oauthProviderId,
+        deletedAt: null,
+      },
+    });
+    if (byProvider) {
+      // Refresh name/avatar in case they changed on Google's side
+      return prisma.user.update({
+        where: { id: byProvider.id },
+        data: { name: data.name, avatarUrl: data.avatarUrl, version: { increment: 1 } },
+      });
+    }
+
+    // 2. Email already exists — link OAuth to the existing account
+    const byEmail = await prisma.user.findFirst({
+      where: { email, deletedAt: null },
+    });
+    if (byEmail) {
+      return prisma.user.update({
+        where: { id: byEmail.id },
+        data: {
+          oauthProvider: data.oauthProvider,
+          oauthProviderId: data.oauthProviderId,
+          avatarUrl: byEmail.avatarUrl ?? data.avatarUrl,
+          emailVerifiedAt: byEmail.emailVerifiedAt ?? new Date(),
+          version: { increment: 1 },
+        },
+      });
+    }
+
+    // 3. New user — create
+    return prisma.user.create({
+      data: {
+        email,
+        name: data.name,
+        avatarUrl: data.avatarUrl,
+        oauthProvider: data.oauthProvider,
+        oauthProviderId: data.oauthProviderId,
+        emailVerifiedAt: new Date(), // Google-verified emails are trusted
+      },
+    });
+  },
 };

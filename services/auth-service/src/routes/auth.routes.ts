@@ -1,7 +1,12 @@
 import { Router } from 'express';
+import type { Request, Response, NextFunction } from 'express';
 import { authController } from '../controllers/auth.controller.js';
 import { asyncHandler } from '../middleware/asyncHandler.js';
 import { getPublicKey } from '../lib/jwt.js';
+import { passport } from '../lib/passport.js';
+import { authService } from '../services/auth.service.js';
+import { SERVICE_URLS } from '@ai-platform/config';
+import type { GoogleProfile } from '../lib/passport.js';
 
 export const authRouter = Router();
 
@@ -114,11 +119,78 @@ authRouter.get('/public-key', (_req, res) => {
   });
 });
 
-// Google OAuth — stubbed until Google credentials configured
-authRouter.get('/google', (_req, res) => {
-  res.status(501).json({
-    success: false,
-    error: { code: 'FEATURE_DISABLED', message: 'Google OAuth not configured' },
-    requestId: res.locals['requestId'],
-  });
+// ─── Google OAuth ─────────────────────────────────────────────────────────────
+
+const GOOGLE_SCOPES = ['email', 'profile'];
+const REFRESH_COOKIE = 'refresh_token';
+const REFRESH_COOKIE_OPTS = {
+  httpOnly: true,
+  secure: process.env['NODE_ENV'] === 'production',
+  sameSite: 'strict' as const,
+  path: '/api/v1/auth',
+  maxAge: parseInt(process.env['JWT_REFRESH_TTL'] ?? '604800', 10) * 1000,
+};
+
+function googleConfigured(): boolean {
+  return Boolean(process.env['GOOGLE_CLIENT_ID'] && process.env['GOOGLE_CLIENT_SECRET']);
+}
+
+/**
+ * @openapi
+ * /api/v1/auth/google:
+ *   get:
+ *     summary: Initiate Google OAuth flow
+ *     tags: [Auth]
+ *     responses:
+ *       302:
+ *         description: Redirect to Google consent screen
+ *       501:
+ *         description: Google OAuth not configured
+ */
+authRouter.get('/google', (req: Request, res: Response, next: NextFunction) => {
+  if (!googleConfigured()) {
+    res.status(501).json({
+      success: false,
+      error: { code: 'FEATURE_DISABLED', message: 'Google OAuth not configured' },
+      requestId: res.locals['requestId'],
+    });
+    return;
+  }
+  passport.authenticate('google', { scope: GOOGLE_SCOPES, session: false })(req, res, next);
 });
+
+/**
+ * @openapi
+ * /api/v1/auth/google/callback:
+ *   get:
+ *     summary: Google OAuth callback — called by Google after consent
+ *     tags: [Auth]
+ *     responses:
+ *       302:
+ *         description: Redirect to frontend with access token
+ */
+authRouter.get(
+  '/google/callback',
+  (req: Request, res: Response, next: NextFunction) => {
+    const frontendUrl = SERVICE_URLS.FRONTEND();
+    passport.authenticate('google', {
+      session: false,
+      failureRedirect: `${frontendUrl}/login?error=oauth_failed`,
+    })(req, res, next);
+  },
+  asyncHandler(async (req: Request, res: Response) => {
+    const profile = req.user as GoogleProfile;
+    const result = await authService.handleOAuthLogin(profile, {
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    res.cookie(REFRESH_COOKIE, result.refreshToken, REFRESH_COOKIE_OPTS);
+
+    const frontendUrl = SERVICE_URLS.FRONTEND();
+    const userEncoded = Buffer.from(JSON.stringify(result.user)).toString('base64');
+    res.redirect(
+      `${frontendUrl}/auth/callback?token=${encodeURIComponent(result.accessToken)}&user=${userEncoded}`
+    );
+  })
+);

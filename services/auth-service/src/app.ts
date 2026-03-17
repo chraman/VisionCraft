@@ -5,9 +5,13 @@ import cookieParser from 'cookie-parser';
 import { requestId } from './middleware/requestId.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authRouter } from './routes/auth.routes.js';
+import { configurePassport, passport } from './lib/passport.js';
 
 export function createApp(): express.Express {
   const app = express();
+
+  // Configure Passport strategies (runs once at startup — logs warning if Google creds missing)
+  configurePassport();
 
   // Security headers
   app.use(helmet());
@@ -29,6 +33,9 @@ export function createApp(): express.Express {
 
   // Cookies (for refresh token)
   app.use(cookieParser());
+
+  // Passport (session: false — stateless JWT, no session store needed)
+  app.use(passport.initialize());
 
   // Request ID on every request
   app.use(requestId);

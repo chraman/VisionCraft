@@ -13,6 +13,7 @@ import {
 } from '../lib/jwt.js';
 import { getRedis } from '../lib/redis.js';
 import type { RegisterInput, LoginInput } from '../schemas/auth.schemas.js';
+import type { GoogleProfile } from '../lib/passport.js';
 import type { User } from '@prisma/client';
 
 const logger = createLogger('auth-service');
@@ -197,6 +198,47 @@ export const authService = {
     });
 
     return { accessToken, refreshToken: newRefreshToken };
+  },
+
+  async handleOAuthLogin(
+    profile: GoogleProfile,
+    meta: { ipAddress?: string; userAgent?: string }
+  ): Promise<AuthResult> {
+    const user = await userRepository.findOrCreateOAuthUser({
+      oauthProvider: profile.provider,
+      oauthProviderId: profile.id,
+      email: profile.email,
+      name: profile.name,
+      avatarUrl: profile.avatarUrl,
+    });
+
+    const { token: accessToken, jti: accessJti } = signAccessToken(user.id, user.role, user.tier);
+    const { token: refreshToken, jti: refreshJti } = signRefreshToken(user.id, user.id);
+
+    const ttl = getRefreshTtlSeconds();
+    await tokenRepository.create({
+      userId: user.id,
+      jti: refreshJti,
+      family: user.id,
+      expiresAt: new Date(Date.now() + ttl * 1000),
+    });
+
+    auditRepository.log({
+      userId: user.id,
+      action: 'OAUTH_LOGIN',
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+      details: { provider: profile.provider },
+    });
+
+    logger.info('OAuth login', {
+      action: 'oauth_login',
+      userId: user.id,
+      provider: profile.provider,
+      accessJti,
+    });
+
+    return { user: sanitizeUser(user), accessToken, refreshToken };
   },
 
   async logout(
