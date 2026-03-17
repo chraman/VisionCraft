@@ -48,6 +48,13 @@ export async function refreshToken(): Promise<{ accessToken: string }> {
   return unwrapResponse(res);
 }
 
+export async function getMe(): Promise<User> {
+  const res = await apiClient.get<{ success: true; data: User; requestId: string }>(
+    API_ROUTES.AUTH.ME
+  );
+  return unwrapResponse(res);
+}
+
 export function loginWithGoogle(): void {
   window.location.href = API_ROUTES.AUTH.GOOGLE;
 }

@@ -55,7 +55,10 @@ function proxyTo(getServiceUrl: () => string, stripPrefix?: string) {
 
 export const proxyRouter = Router();
 
-// Auth routes — no JWT required (login, register, refresh, logout, public-key)
+// /me needs JWT validation so the gateway can inject x-user-id
+proxyRouter.get('/v1/auth/me', requireAuth, proxyTo(SERVICE_URLS.AUTH));
+
+// All other auth routes — no JWT required (login, register, refresh, logout, public-key)
 proxyRouter.use('/v1/auth', proxyTo(SERVICE_URLS.AUTH));
 
 // User routes — JWT required

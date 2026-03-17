@@ -44,6 +44,7 @@ export const API_ROUTES = {
     LOGIN: '/api/v1/auth/login',
     LOGOUT: '/api/v1/auth/logout',
     REFRESH: '/api/v1/auth/refresh',
+    ME: '/api/v1/auth/me',
     VERIFY_EMAIL: '/api/v1/auth/verify-email',
     GOOGLE: '/api/v1/auth/google',
     GOOGLE_CALLBACK: '/api/v1/auth/google/callback',
