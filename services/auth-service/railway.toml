@@ -1,6 +1,10 @@
 [build]
 builder = "nixpacks"
+# Railway CDs into this service's Root Directory (services/auth-service) before
+# running the build. `cd ../..` navigates back to the monorepo root so pnpm
+# workspaces and turbo are available.
 buildCommand = "cd ../.. && pnpm install --frozen-lockfile && pnpm turbo build --filter=@ai-platform/auth-service"
+watchPatterns = ["services/auth-service/**", "packages/**", "pnpm-lock.yaml", "turbo.json"]
 
 [deploy]
 startCommand = "node dist/index.js"

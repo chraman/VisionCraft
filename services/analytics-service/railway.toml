@@ -1,6 +1,7 @@
 [build]
 builder = "nixpacks"
 buildCommand = "cd ../.. && pnpm install --frozen-lockfile && pnpm turbo build --filter=@ai-platform/analytics-service"
+watchPatterns = ["services/analytics-service/**", "packages/**", "pnpm-lock.yaml", "turbo.json"]
 
 [deploy]
 startCommand = "node dist/index.js"

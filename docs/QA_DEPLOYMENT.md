@@ -107,6 +107,8 @@ Save both connection strings — you will need them in Steps 4 and 7.
 
 ### Step 3 — Backend services
 
+This is a Turborepo monorepo — all services live in the same repository. Railway handles this by giving each service its own **Root Directory** setting, which tells Railway which subdirectory to treat as the service root. The `railway.toml` in each service directory then navigates back up to the monorepo root (`cd ../..`) so the build can use pnpm workspaces and Turborepo correctly.
+
 For each of the 6 services, click **New** → **GitHub Repo** → select this repo, then configure:
 
 | Service name in Railway | Root Directory setting          |
@@ -120,9 +122,29 @@ For each of the 6 services, click **New** → **GitHub Repo** → select this re
 
 For each service:
 
-1. Go to **Settings** → **Source** → set **Root Directory** to the path above
-2. Railway will detect the `railway.toml` in that directory automatically — no build/start command to enter manually
-3. **Disable auto-deploy**: Settings → Source → toggle off **Deploy on Push** — the GitHub Actions workflow controls all deploys
+1. Go to **Settings** → **Source** → set **Root Directory** to the path in the table above
+2. Railway will pick up the `railway.toml` from that directory automatically — no build or start command to enter manually
+3. **Disable auto-deploy**: Settings → Source → toggle off **Deploy on Push** — the `deploy-qa.yml` GitHub Actions workflow controls all deploys
+
+**How the monorepo build works end-to-end:**
+
+```
+GitHub Actions
+  └─ railway up --service auth-service   ← runs from repo root, uploads full monorepo
+
+Railway receives the full repo
+  └─ CDs into services/auth-service      ← Root Directory setting
+       └─ runs buildCommand:
+            cd ../..                     ← back to monorepo root
+            pnpm install --frozen-lockfile
+            pnpm turbo build --filter=@ai-platform/auth-service
+                                         ← turbo builds only auth-service + its
+                                            workspace dependencies (packages/*)
+  └─ runs startCommand from services/auth-service:
+       node dist/index.js                ← dist/ produced by the turbo build above
+```
+
+Each `railway.toml` also declares `watchPatterns` — Railway uses these to skip a rebuild if the push didn't touch that service's files or the shared `packages/` directory.
 
 ---
 

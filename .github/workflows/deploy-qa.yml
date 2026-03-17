@@ -50,38 +50,36 @@ jobs:
       - name: Install Railway CLI
         run: npm install -g @railway/cli@latest
 
+      # All `railway up` commands run from the repo root so the full monorepo
+      # is uploaded. Railway then CDs into each service's configured Root Directory
+      # (services/<name>) before running the build command, which uses
+      # `cd ../..` to navigate back to the monorepo root for pnpm/turbo.
       - name: Deploy auth-service
-        working-directory: services/auth-service
         run: railway up --service auth-service --environment qa --detach
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
       - name: Deploy api-gateway
-        working-directory: services/api-gateway
         run: railway up --service api-gateway --environment qa --detach
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
       - name: Deploy user-service
-        working-directory: services/user-service
         run: railway up --service user-service --environment qa --detach
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
       - name: Deploy image-service
-        working-directory: services/image-service
         run: railway up --service image-service --environment qa --detach
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
       - name: Deploy notification-service
-        working-directory: services/notification-service
         run: railway up --service notification-service --environment qa --detach
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
       - name: Deploy analytics-service
-        working-directory: services/analytics-service
         run: railway up --service analytics-service --environment qa --detach
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
