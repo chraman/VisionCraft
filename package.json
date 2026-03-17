@@ -18,7 +18,22 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "generate:api-client": "turbo run generate:api-client",
-    "prepare": "husky"
+    "prepare": "husky",
+    "dev:web": "turbo dev --filter=@ai-platform/web",
+    "dev:api-gateway": "turbo dev --filter=@ai-platform/api-gateway",
+    "dev:auth": "turbo dev --filter=@ai-platform/auth-service",
+    "dev:user": "turbo dev --filter=@ai-platform/user-service",
+    "dev:image": "turbo dev --filter=@ai-platform/image-service",
+    "dev:notify": "turbo dev --filter=@ai-platform/notification-service",
+    "dev:analytics": "turbo dev --filter=@ai-platform/analytics-service",
+    "dev:backend": "turbo dev --filter=@ai-platform/api-gateway --filter=@ai-platform/auth-service --filter=@ai-platform/user-service --filter=@ai-platform/image-service --filter=@ai-platform/notification-service --filter=@ai-platform/analytics-service",
+    "start:api-gateway": "turbo start --filter=@ai-platform/api-gateway",
+    "start:auth": "turbo start --filter=@ai-platform/auth-service",
+    "start:user": "turbo start --filter=@ai-platform/user-service",
+    "start:image": "turbo start --filter=@ai-platform/image-service",
+    "start:notify": "turbo start --filter=@ai-platform/notification-service",
+    "start:analytics": "turbo start --filter=@ai-platform/analytics-service",
+    "start:backend": "turbo start --filter=@ai-platform/api-gateway --filter=@ai-platform/auth-service --filter=@ai-platform/user-service --filter=@ai-platform/image-service --filter=@ai-platform/notification-service --filter=@ai-platform/analytics-service"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.6.0",
