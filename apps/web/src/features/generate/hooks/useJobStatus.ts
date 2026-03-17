@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { GenerationJob } from '@ai-platform/types';
+import { API_ROUTES } from '@ai-platform/config';
 import { getJobStatus } from '../../../services/image.service';
 import { track } from '../../../lib/analytics';
 import { useAuthStore } from '@ai-platform/store';
@@ -24,7 +25,7 @@ export function useJobStatus(jobId: string | null) {
     if (!jobId) return;
 
     sseErrorRef.current = false;
-    const es = new EventSource(`/api/v1/images/jobs/${jobId}/events`, {
+    const es = new EventSource(API_ROUTES.IMAGES.JOB_EVENTS(jobId), {
       withCredentials: true,
     });
     eventSourceRef.current = es;

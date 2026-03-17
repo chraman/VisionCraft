@@ -2,11 +2,8 @@ import { Router } from 'express';
 import type { Request, Response, NextFunction } from 'express';
 import axios, { type AxiosRequestConfig } from 'axios';
 import { AppError } from '@ai-platform/types';
+import { SERVICE_URLS } from '@ai-platform/config';
 import { requireAuth } from '../middleware/auth.js';
-
-const authServiceUrl = () => process.env['AUTH_SERVICE_URL'] ?? 'http://localhost:3001';
-const userServiceUrl = () => process.env['USER_SERVICE_URL'] ?? 'http://localhost:3002';
-const imageServiceUrl = () => process.env['IMAGE_SERVICE_URL'] ?? 'http://localhost:3003';
 
 // ─── Proxy helper ─────────────────────────────────────────────────────────────
 
@@ -59,10 +56,10 @@ function proxyTo(getServiceUrl: () => string, stripPrefix?: string) {
 export const proxyRouter = Router();
 
 // Auth routes — no JWT required (login, register, refresh, logout, public-key)
-proxyRouter.use('/v1/auth', proxyTo(authServiceUrl));
+proxyRouter.use('/v1/auth', proxyTo(SERVICE_URLS.AUTH));
 
 // User routes — JWT required
-proxyRouter.use('/v1/users', requireAuth, proxyTo(userServiceUrl));
+proxyRouter.use('/v1/users', requireAuth, proxyTo(SERVICE_URLS.USER));
 
 // Image routes — JWT required
-proxyRouter.use('/v1/images', requireAuth, proxyTo(imageServiceUrl));
+proxyRouter.use('/v1/images', requireAuth, proxyTo(SERVICE_URLS.IMAGE));

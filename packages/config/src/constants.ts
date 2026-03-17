@@ -1,5 +1,42 @@
 import type { UserTier } from '@ai-platform/types';
 
+// ─── Service port registry ────────────────────────────────────────────────────
+// Single source of truth for every service's default port.
+// Change a port here once and every URL below updates automatically.
+
+export const SERVICE_PORTS = {
+  API_GATEWAY: 3000,
+  AUTH: 3001,
+  USER: 3002,
+  IMAGE: 3003,
+  NOTIFY: 3004,
+  ANALYTICS: 3005,
+  AI: 8000,
+  FRONTEND: 5173,
+} as const;
+
+// ─── Service URL resolver ─────────────────────────────────────────────────────
+// Used by backend services only. Each function reads the env var at call-time
+// so tests can override process.env without module-level caching.
+//
+// Dev fallback:  http://localhost:<port>
+// Staging/Prod:  set the env var to the Railway internal hostname, e.g.
+//                AUTH_SERVICE_URL=http://auth-service.railway.internal:3001
+
+export const SERVICE_URLS = {
+  AUTH: () => process.env['AUTH_SERVICE_URL'] ?? `http://localhost:${SERVICE_PORTS.AUTH}`,
+  USER: () => process.env['USER_SERVICE_URL'] ?? `http://localhost:${SERVICE_PORTS.USER}`,
+  IMAGE: () => process.env['IMAGE_SERVICE_URL'] ?? `http://localhost:${SERVICE_PORTS.IMAGE}`,
+  NOTIFY: () => process.env['NOTIFY_SERVICE_URL'] ?? `http://localhost:${SERVICE_PORTS.NOTIFY}`,
+  ANALYTICS: () =>
+    process.env['ANALYTICS_SERVICE_URL'] ?? `http://localhost:${SERVICE_PORTS.ANALYTICS}`,
+  AI: () => process.env['AI_SERVICE_URL'] ?? `http://localhost:${SERVICE_PORTS.AI}`,
+  FRONTEND: () => process.env['FRONTEND_URL'] ?? `http://localhost:${SERVICE_PORTS.FRONTEND}`,
+  API_GW: () => process.env['API_GW_URL'] ?? `http://localhost:${SERVICE_PORTS.API_GATEWAY}`,
+} as const;
+
+// ─── API routes ───────────────────────────────────────────────────────────────
+
 export const API_ROUTES = {
   // Auth
   AUTH: {
@@ -29,6 +66,7 @@ export const API_ROUTES = {
     BY_ID: (id: string) => `/api/v1/images/${id}`,
     SAVE: (id: string) => `/api/v1/images/${id}/save`,
     JOB: (id: string) => `/api/v1/images/jobs/${id}`,
+    JOB_EVENTS: (id: string) => `/api/v1/images/jobs/${id}/events`,
   },
   // Notifications
   NOTIFY: {

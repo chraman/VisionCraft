@@ -2,7 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import axios from 'axios';
 import { AppError } from '@ai-platform/types';
-import { REDIS_KEYS } from '@ai-platform/config';
+import { REDIS_KEYS, SERVICE_URLS } from '@ai-platform/config';
 import { createLogger } from '@ai-platform/utils';
 import { getRedis } from '../lib/redis.js';
 
@@ -20,10 +20,9 @@ async function getPublicKey(): Promise<string> {
   }
 
   // Fetch from auth-service if not set locally (allows key rotation without gateway restart)
-  const authUrl = process.env['AUTH_SERVICE_URL'] ?? 'http://localhost:3001';
   try {
     const res = await axios.get<{ data: { publicKey: string } }>(
-      `${authUrl}/api/v1/auth/public-key`
+      `${SERVICE_URLS.AUTH()}/api/v1/auth/public-key`
     );
     _publicKey = res.data.data.publicKey;
     logger.info('Fetched JWT public key from auth-service', { action: 'key_fetch' });
