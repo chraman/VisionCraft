@@ -3,6 +3,7 @@ import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { track } from '../lib/analytics';
 import { useAuthStore } from '@ai-platform/store';
+import { useLogout } from '../features/auth/hooks/useLogout';
 
 const navLinks = [
   { to: '/generate', label: 'Generate' },
@@ -15,6 +16,7 @@ export default function AppLayout() {
 
   const location = useLocation();
   const { user } = useAuthStore();
+  const { mutate: logout, isPending: isLoggingOut } = useLogout();
 
   useEffect(() => {
     track({
@@ -48,6 +50,15 @@ export default function AppLayout() {
             </NavLink>
           ))}
         </nav>
+        <div className="mt-auto pt-4 border-t border-gray-200">
+          <button
+            onClick={() => logout()}
+            disabled={isLoggingOut}
+            className="w-full rounded-md px-3 py-2 text-sm font-medium text-left text-gray-600 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-50"
+          >
+            {isLoggingOut ? 'Signing out…' : 'Sign out'}
+          </button>
+        </div>
       </aside>
 
       {/* Main content */}
