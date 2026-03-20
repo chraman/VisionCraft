@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, release]
   pull_request:
-    branches: [main]
+    branches: [main, develop, release]
 
 env:
   PNPM_VERSION: 10.30.1

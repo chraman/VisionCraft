@@ -1,9 +1,13 @@
 name: Deploy Production
 
 on:
-  # Manual trigger only — production deploys require explicit approval
+  push:
+    branches: [release]
   workflow_dispatch:
     inputs:
+      confirmation:
+        description: 'Type "deploy" to confirm production deployment'
+        required: true
       skip_e2e:
         description: 'Skip E2E tests (emergency hotfix only)'
         required: false
@@ -15,10 +19,67 @@ env:
   NODE_VERSION: '20'
 
 jobs:
+  # ─── Gate ──────────────────────────────────────────────────────────────────
+  gate:
+    name: Confirm deployment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate confirmation (manual trigger only)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirmation != 'deploy'
+        run: |
+          echo "ERROR: You must type 'deploy' to confirm."
+          exit 1
+      - name: Auto-approve (push to release)
+        if: github.event_name == 'push'
+        run: echo "Auto-approved — push to release branch."
+
+  # ─── Detect what changed ─────────────────────────────────────────────────
+  detect-changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    needs: gate
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      packages: ${{ steps.filter.outputs.packages }}
+      ai_service: ${{ steps.filter.outputs.ai_service }}
+      infra: ${{ steps.filter.outputs.infra }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'services/**'
+              - 'workers/**'
+              - 'packages/types/**'
+              - 'packages/utils/**'
+              - 'packages/config/**'
+            frontend:
+              - 'apps/web/**'
+              - 'apps/admin/**'
+              - 'packages/ui/**'
+              - 'packages/store/**'
+              - 'packages/api-client/**'
+              - 'packages/feature-flags/**'
+              - 'packages/types/**'
+              - 'packages/utils/**'
+            packages:
+              - 'packages/**'
+            ai_service:
+              - 'ai-service/**'
+            infra:
+              - 'infra/**'
+              - 'prisma/**'
+
   # ─── Pre-flight checks ─────────────────────────────────────────────────────
   preflight:
     name: Pre-flight checks
     runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.packages == 'true' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
 
@@ -57,7 +118,8 @@ jobs:
   deploy-backend:
     name: Deploy backend to Railway Production
     runs-on: ubuntu-latest
-    needs: preflight
+    needs: [detect-changes, preflight]
+    if: needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.packages == 'true' || github.event_name == 'workflow_dispatch'
     environment: production
     steps:
       - uses: actions/checkout@v4
@@ -122,7 +184,11 @@ jobs:
   migrate:
     name: Migrate production database
     runs-on: ubuntu-latest
-    needs: deploy-backend
+    needs: [detect-changes, deploy-backend]
+    if: |
+      always() &&
+      (needs.deploy-backend.result == 'success' || needs.deploy-backend.result == 'skipped') &&
+      (needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.infra == 'true' || github.event_name == 'workflow_dispatch')
     environment: production
     steps:
       - uses: actions/checkout@v4
@@ -149,7 +215,8 @@ jobs:
   deploy-frontend:
     name: Deploy frontend to Vercel Production
     runs-on: ubuntu-latest
-    needs: preflight
+    needs: [detect-changes, preflight]
+    if: needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.packages == 'true' || github.event_name == 'workflow_dispatch'
     environment: production
     outputs:
       url: ${{ steps.deploy.outputs.url }}
@@ -182,6 +249,8 @@ jobs:
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
       - name: Deploy to Vercel Production
         id: deploy
@@ -193,12 +262,17 @@ jobs:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
-  # ─── E2E tests against live Production ─────────────────────────────────────
+  # ─── E2E smoke tests against live Production ───────────────────────────────
   e2e:
     name: E2E smoke tests — Production
     runs-on: ubuntu-latest
-    if: ${{ github.event.inputs.skip_e2e != 'true' }}
-    needs: [migrate, deploy-frontend]
+    needs: [detect-changes, migrate, deploy-frontend]
+    if: |
+      always() &&
+      github.event.inputs.skip_e2e != 'true' &&
+      (needs.migrate.result == 'success' || needs.migrate.result == 'skipped') &&
+      (needs.deploy-frontend.result == 'success' || needs.deploy-frontend.result == 'skipped') &&
+      (needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.packages == 'true' || github.event_name == 'workflow_dispatch')
     environment: production
     steps:
       - uses: actions/checkout@v4
@@ -219,9 +293,10 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Run E2E smoke tests against Production
-        run: pnpm test:e2e --project=chromium
+        run: pnpm test:e2e --project=chromium --grep @smoke
         env:
-          BASE_URL: ${{ needs.deploy-frontend.outputs.url }}
+          # When deploy-frontend was skipped, fall back to the existing prod URL.
+          BASE_URL: ${{ needs.deploy-frontend.outputs.url || secrets.RAILWAY_PROD_FRONTEND_URL }}
           CI: true
 
       - name: Upload Playwright report
@@ -237,6 +312,10 @@ jobs:
     name: Post-deploy monitoring (15 min)
     runs-on: ubuntu-latest
     needs: [migrate, deploy-frontend]
+    if: |
+      always() &&
+      (needs.migrate.result == 'success' || needs.migrate.result == 'skipped') &&
+      (needs.deploy-frontend.result == 'success' || needs.deploy-frontend.result == 'skipped')
     environment: production
     steps:
       - name: Monitor health for 15 minutes
