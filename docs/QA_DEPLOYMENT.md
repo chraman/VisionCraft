@@ -68,8 +68,8 @@ git push origin qa
 The following tools must be installed locally for the one-time setup steps:
 
 ```bash
-npm install -g @railway/cli   # Railway CLI
-npm install -g vercel         # Vercel CLI
+pnpm add -g @railway/cli   # Railway CLI
+pnpm add -g vercel         # Vercel CLI
 ```
 
 You also need accounts on:
