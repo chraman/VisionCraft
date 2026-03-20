@@ -1,0 +1,45 @@
+# docker-compose.prod.yml — Production environment overrides
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up
+#
+# Production uses Railway-managed Postgres + Redis (external).
+# This file is primarily for local production-like testing.
+# Real production runs on Railway (backend) + Vercel (frontend).
+
+version: '3.9'
+
+services:
+  # ─── Disable local infra — prod uses Railway-managed databases ─────────────
+  postgres:
+    profiles: ['disabled']
+
+  redis:
+    profiles: ['disabled']
+
+  # ─── AI Service — production config ────────────────────────────────────────
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: ai-platform-ai-service-prod
+    restart: unless-stopped
+    environment:
+      PORT: '8000'
+      SERVICE_NAME: ai-service
+      NODE_ENV: production
+      STABILITY_API_KEY: ${STABILITY_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      HUGGINGFACE_API_KEY: ${HUGGINGFACE_API_KEY}
+      SAFETY_ENABLED: ${SAFETY_ENABLED:-false}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_BUCKET_GENERATED: ${AWS_BUCKET_GENERATED}
+      SENTRY_DSN: ${SENTRY_DSN}
+      LOG_LEVEL: warn
+    ports:
+      - '8000:8000'
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2.0'

@@ -1,0 +1,19 @@
+{
+  "image.text_generation.enabled": true,
+  "image.img2img.enabled": true,
+  "image.batch_generation.enabled": false,
+  "image.upscaling.enabled": false,
+  "image.inpainting.enabled": false,
+  "image.video_generation.enabled": false,
+  "ai.model_selector.enabled": false,
+  "ai.style_presets.enabled": false,
+  "ai.safety_check.enabled": false,
+  "ui.dark_mode.enabled": false,
+  "ui.new_dashboard.enabled": "control",
+  "payments.stripe.enabled": false,
+  "payments.credits.enabled": false,
+  "user.social_profiles.enabled": false,
+  "user.teams.enabled": false,
+  "user.api_access.enabled": false,
+  "admin.dashboard.enabled": false
+}

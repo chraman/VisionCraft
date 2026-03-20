@@ -1,0 +1,52 @@
+name: Promote to Production
+
+on:
+  # Triggered after successful QA E2E tests, or manually
+  workflow_dispatch:
+    inputs:
+      qa_run_id:
+        description: 'Deploy QA workflow run ID that passed E2E (optional)'
+        required: false
+        type: string
+
+env:
+  PNPM_VERSION: 10.30.1
+  NODE_VERSION: '20'
+
+jobs:
+  # ─── Verify QA passed ──────────────────────────────────────────────────────
+  verify-qa:
+    name: Verify QA deployment is healthy
+    runs-on: ubuntu-latest
+    environment: qa
+    steps:
+      - name: Check QA health
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${{ secrets.RAILWAY_QA_API_URL }}/health" || echo "000")
+          if [ "$STATUS" != "200" ]; then
+            echo "ERROR: QA environment is not healthy (HTTP $STATUS). Cannot promote."
+            exit 1
+          fi
+          echo "QA environment is healthy. Proceeding with promotion."
+
+  # ─── Trigger production deploy ─────────────────────────────────────────────
+  promote:
+    name: Trigger production deployment
+    runs-on: ubuntu-latest
+    needs: verify-qa
+    steps:
+      - name: Trigger deploy-prod workflow
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'deploy-prod.yml',
+              ref: 'main',
+              inputs: {
+                skip_e2e: 'false',
+              },
+            });
+            console.log('Production deployment triggered successfully.');
