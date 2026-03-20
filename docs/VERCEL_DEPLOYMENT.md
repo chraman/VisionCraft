@@ -15,20 +15,41 @@ This document covers Vercel deployment for the `apps/web` frontend in this Turbo
    - [Step 3 — Environment Variables](#step-3--environment-variables)
    - [Step 4 — GitHub Secrets](#step-4--github-secrets)
    - [Step 5 — Turborepo Remote Cache (Optional)](#step-5--turborepo-remote-cache-optional)
-5. [QA Deployment](#qa-deployment)
+5. [Branching Strategy](#branching-strategy)
+6. [QA Deployment](#qa-deployment)
    - [Automated (CI)](#automated-ci)
    - [Manual (CLI)](#manual-cli)
    - [QA Domain Alias](#qa-domain-alias)
-6. [Production Deployment](#production-deployment)
-   - [Automated (Push to Main)](#automated-push-to-main)
+7. [Production Deployment](#production-deployment)
+   - [Automated (Push to Release)](#automated-push-to-release)
    - [Manual Promotion](#manual-promotion)
    - [Production Custom Domain](#production-custom-domain)
-7. [Environment Variable Reference](#environment-variable-reference)
-8. [Build Pipeline Details](#build-pipeline-details)
-9. [Monorepo Watch & Caching](#monorepo-watch--caching)
-10. [Rollback Procedures](#rollback-procedures)
-11. [Admin App (Phase 2)](#admin-app-phase-2)
-12. [Troubleshooting](#troubleshooting)
+8. [Environment Variable Reference](#environment-variable-reference)
+9. [Build Pipeline Details](#build-pipeline-details)
+10. [Monorepo Watch & Caching](#monorepo-watch--caching)
+11. [Rollback Procedures](#rollback-procedures)
+12. [Admin App (Phase 2)](#admin-app-phase-2)
+13. [Troubleshooting](#troubleshooting)
+
+---
+
+## Branching Strategy
+
+| Branch | Purpose | Vercel Environment | Railway Target |
+|---|---|---|---|
+| `main` | Local development | — (not deployed) | — |
+| `develop` | QA / staging | Preview | QA / staging services |
+| `release` | Production | Production | Production services |
+
+```
+main (local dev)
+  └─► develop (QA)           ← merge main → develop to deploy QA
+       └─► release (prod)    ← merge develop → release to deploy prod
+```
+
+- Feature branches are created from `main` and merged back to `main` via PR
+- `develop` is the integration branch — merge `main` into `develop` to trigger QA deploys
+- `release` is the production branch — merge `develop` into `release` to trigger production deploys
 
 ---
 
@@ -38,8 +59,8 @@ This document covers Vercel deployment for the `apps/web` frontend in this Turbo
                     ┌─────────────────────────┐
                     │     Vercel (Frontend)    │
                     │                         │
-                    │  apps/web  ─► Preview   │  ← QA (preview deployments)
-                    │             ─► Production│  ← Prod (main branch)
+                    │  apps/web  ─► Preview   │  ← QA (develop branch)
+                    │             ─► Production│  ← Prod (release branch)
                     └────────────┬────────────┘
                                  │ HTTPS
                                  ▼
@@ -54,8 +75,9 @@ This document covers Vercel deployment for the `apps/web` frontend in this Turbo
                     └─────────────────────────┘
 ```
 
-- **QA** uses Vercel **preview** deployments (unique URL per deploy)
-- **Production** uses Vercel **production** deployments (custom domain)
+- **QA** uses Vercel **preview** deployments triggered by pushes to the `develop` branch
+- **Production** uses Vercel **production** deployments triggered by pushes to the `release` branch
+- **Local development** happens on `main` — this branch is never deployed
 - The frontend communicates with backend exclusively through the `api-gateway`
 - Only `VITE_`-prefixed env vars are exposed to the browser (Vite requirement)
 
@@ -224,18 +246,18 @@ Vercel-hosted Turborepo remote cache is free and included with your Vercel accou
 
 ### Automated (CI)
 
-QA deploys are triggered by pushing to the `qa` branch. The `deploy-qa.yml` workflow handles the full pipeline:
+QA deploys are triggered by pushing to the `develop` branch. The `deploy-qa.yml` workflow handles the full pipeline:
 
 ```bash
-# First time
+# First time — create the develop branch
 git checkout main
-git checkout -b qa
-git push origin qa
+git checkout -b develop
+git push origin develop
 
-# Subsequent deploys
-git checkout qa
+# Subsequent deploys — merge main into develop
+git checkout develop
 git merge main
-git push origin qa
+git push origin develop
 ```
 
 **What happens in CI:**
@@ -290,31 +312,43 @@ ALLOWED_ORIGINS=https://visioncraft-qa.vercel.app,https://*.vercel.app
 
 ## Production Deployment
 
-### Automated (Push to Main)
+### Automated (Push to Release)
 
-By default, Vercel auto-deploys the production environment when code is pushed to `main`:
+Vercel auto-deploys the production environment when code is pushed to the `release` branch.
+
+In Vercel dashboard → Project → **Settings** → **Git** → **Production Branch**, set the production branch to `release`.
+
+```bash
+# First time — create the release branch from develop
+git checkout develop
+git checkout -b release
+git push origin release
+
+# Subsequent deploys — merge develop into release
+git checkout release
+git merge develop
+git push origin release
+```
 
 ```
-PR merged to main
-  └─► Vercel detects push
+develop merged into release
+  └─► Vercel detects push to release
        └─► Builds: cd ../.. && pnpm turbo build --filter=@ai-platform/web
             └─► Deploys to production domain
 ```
 
-**To disable auto-deploy** (recommended if using manual promotion):
-
-Vercel dashboard → Project → **Settings** → **Git** → toggle off **Auto Deploy** for production.
-
 ### Manual Promotion
 
-The recommended production flow from `CLAUDE.md`:
+The recommended production flow:
 
 ```
-1. Merge PR to main  →  auto-deploys to staging (Vercel preview)
-2. Playwright E2E runs against staging  →  must pass (CI gate)
-3. Manual workflow_dispatch in GitHub Actions  →  promote to production
-4. Automated smoke tests run post-deploy
-5. Monitor Sentry + Grafana for 15 minutes  →  declare healthy
+1. Merge feature branches into main (local dev)
+2. Merge main → develop  →  triggers QA deploy (Vercel preview)
+3. Playwright E2E runs against QA  →  must pass (CI gate)
+4. Merge develop → release  →  triggers production deploy
+   (or use manual workflow_dispatch for extra gate)
+5. Automated smoke tests run post-deploy
+6. Monitor Sentry + Grafana for 15 minutes  →  declare healthy
 ```
 
 **Promote via CLI:**
@@ -324,11 +358,11 @@ The recommended production flow from `CLAUDE.md`:
 cd apps/web
 vercel --prod
 
-# Or promote an existing preview deployment
+# Or promote an existing QA/preview deployment to production
 vercel promote <deployment-url>
 ```
 
-**Promote via GitHub Actions (workflow_dispatch):**
+**Promote via GitHub Actions (push to release + optional manual gate):**
 
 Create `.github/workflows/deploy-prod.yml`:
 
@@ -336,6 +370,8 @@ Create `.github/workflows/deploy-prod.yml`:
 name: Deploy Production
 
 on:
+  push:
+    branches: [release]
   workflow_dispatch:
     inputs:
       confirmation:
@@ -347,11 +383,14 @@ jobs:
     name: Confirm deployment
     runs-on: ubuntu-latest
     steps:
-      - name: Validate confirmation
-        if: github.event.inputs.confirmation != 'deploy'
+      - name: Validate confirmation (manual trigger only)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirmation != 'deploy'
         run: |
           echo "ERROR: You must type 'deploy' to confirm."
           exit 1
+      - name: Auto-approve (push to release)
+        if: github.event_name == 'push'
+        run: echo "Auto-approved — push to release branch."
 
   deploy-frontend:
     name: Deploy frontend to Vercel Production
@@ -587,6 +626,7 @@ ALLOWED_ORIGINS=https://visioncraft-qa.vercel.app,https://*.vercel.app
 - Check that the Vercel GitHub integration is installed on the repo
 - Verify the branch is not excluded in Vercel → Settings → Git → Branch Deployments
 - If using the CLI workflow (deploy-qa.yml), check that `VERCEL_TOKEN`, `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID` secrets are set in the `qa` GitHub environment
+- Ensure the `develop` branch exists and Vercel is configured to build preview deployments for it
 
 ### Build is slow in CI
 
