@@ -1,0 +1,39 @@
+# docker-compose.qa.yml — QA environment overrides
+# Usage: docker compose -f docker-compose.yml -f docker-compose.qa.yml up
+#
+# QA uses Railway-managed Postgres + Redis (external).
+# Override DB/Redis URLs via .env.qa.local (gitignored).
+
+version: '3.9'
+
+services:
+  # ─── Disable local infra — QA uses Railway-managed databases ──────────────
+  postgres:
+    profiles: ['disabled']
+
+  redis:
+    profiles: ['disabled']
+
+  # ─── AI Service — real Python service instead of stub ──────────────────────
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: ai-platform-ai-service-qa
+    restart: unless-stopped
+    environment:
+      PORT: '8000'
+      SERVICE_NAME: ai-service
+      NODE_ENV: staging
+      STABILITY_API_KEY: ${STABILITY_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      HUGGINGFACE_API_KEY: ${HUGGINGFACE_API_KEY}
+      SAFETY_ENABLED: 'false'
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_BUCKET_GENERATED: ${AWS_BUCKET_GENERATED}
+      SENTRY_DSN: ${SENTRY_DSN}
+      LOG_LEVEL: info
+    ports:
+      - '8000:8000'

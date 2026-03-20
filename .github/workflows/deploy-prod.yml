@@ -1,0 +1,260 @@
+name: Deploy Production
+
+on:
+  # Manual trigger only — production deploys require explicit approval
+  workflow_dispatch:
+    inputs:
+      skip_e2e:
+        description: 'Skip E2E tests (emergency hotfix only)'
+        required: false
+        default: 'false'
+        type: boolean
+
+env:
+  PNPM_VERSION: 10.30.1
+  NODE_VERSION: '20'
+
+jobs:
+  # ─── Pre-flight checks ─────────────────────────────────────────────────────
+  preflight:
+    name: Pre-flight checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm turbo typecheck --parallel
+
+      - name: Lint
+        run: pnpm turbo lint --parallel
+
+      - name: Test
+        run: pnpm turbo test --parallel
+
+      - name: Build
+        run: pnpm turbo build
+        env:
+          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+
+      - name: Security audit
+        run: pnpm audit --audit-level=high
+        continue-on-error: true
+
+  # ─── Deploy backend → Railway Production ───────────────────────────────────
+  deploy-backend:
+    name: Deploy backend to Railway Production
+    runs-on: ubuntu-latest
+    needs: preflight
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install Railway CLI
+        run: pnpm add -g @railway/cli@latest
+
+      - name: Deploy auth-service
+        run: railway up --service auth-service --environment production --detach
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Deploy api-gateway
+        run: railway up --service api-gateway --environment production --detach
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Deploy user-service
+        run: railway up --service user-service --environment production --detach
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Deploy image-service
+        run: railway up --service image-service --environment production --detach
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Deploy notification-service
+        run: railway up --service notification-service --environment production --detach
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Deploy analytics-service
+        run: railway up --service analytics-service --environment production --detach
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Wait for deployments to become healthy
+        run: |
+          echo "Waiting for api-gateway to be healthy..."
+          for i in $(seq 1 30); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${{ secrets.RAILWAY_PROD_API_URL }}/health" || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "api-gateway is healthy."
+              exit 0
+            fi
+            echo "  attempt $i: HTTP $STATUS — retrying in 10s"
+            sleep 10
+          done
+          echo "ERROR: api-gateway did not become healthy within 5 minutes."
+          exit 1
+
+  # ─── Run DB migrations ─────────────────────────────────────────────────────
+  migrate:
+    name: Migrate production database
+    runs-on: ubuntu-latest
+    needs: deploy-backend
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run Prisma migrations against production database
+        working-directory: services/auth-service
+        run: pnpm prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.RAILWAY_PROD_DATABASE_URL }}
+
+  # ─── Deploy frontend → Vercel Production ───────────────────────────────────
+  deploy-frontend:
+    name: Deploy frontend to Vercel Production
+    runs-on: ubuntu-latest
+    needs: preflight
+    environment: production
+    outputs:
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Vercel CLI
+        run: pnpm add -g vercel@latest
+
+      - name: Pull Vercel environment (production)
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Build for Vercel
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Deploy to Vercel Production
+        id: deploy
+        run: |
+          URL=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
+          echo "url=$URL" >> $GITHUB_OUTPUT
+          echo "Deployed frontend to: $URL"
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+  # ─── E2E tests against live Production ─────────────────────────────────────
+  e2e:
+    name: E2E smoke tests — Production
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.skip_e2e != 'true' }}
+    needs: [migrate, deploy-frontend]
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run E2E smoke tests against Production
+        run: pnpm test:e2e --project=chromium
+        env:
+          BASE_URL: ${{ needs.deploy-frontend.outputs.url }}
+          CI: true
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-prod
+          path: playwright-report/
+          retention-days: 14
+
+  # ─── Post-deploy health monitoring ─────────────────────────────────────────
+  post-deploy-monitor:
+    name: Post-deploy monitoring (15 min)
+    runs-on: ubuntu-latest
+    needs: [migrate, deploy-frontend]
+    environment: production
+    steps:
+      - name: Monitor health for 15 minutes
+        run: |
+          echo "Monitoring production health for 15 minutes..."
+          FAILURES=0
+          for i in $(seq 1 15); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${{ secrets.RAILWAY_PROD_API_URL }}/health" || echo "000")
+            if [ "$STATUS" != "200" ]; then
+              FAILURES=$((FAILURES + 1))
+              echo "  minute $i: UNHEALTHY (HTTP $STATUS) — failures: $FAILURES"
+            else
+              echo "  minute $i: healthy"
+            fi
+            if [ "$FAILURES" -ge 3 ]; then
+              echo "ERROR: 3+ health check failures. Production may be degraded."
+              exit 1
+            fi
+            sleep 60
+          done
+          echo "Production is healthy after 15 minutes of monitoring."

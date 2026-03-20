@@ -1,21 +1,46 @@
 import type { FeatureFlagKey, FlagValue } from '@ai-platform/types';
 import type { FlagContext } from './types.js';
 import defaultFlags from './flags.default.json';
+import qaFlags from './flags.qa.json';
+import prodFlags from './flags.prod.json';
+
+type FlagEnvironment = 'development' | 'staging' | 'production' | 'test';
+
+const FLAG_FILES: Record<FlagEnvironment, Record<string, FlagValue>> = {
+  development: defaultFlags as Record<string, FlagValue>,
+  test: defaultFlags as Record<string, FlagValue>,
+  staging: qaFlags as Record<string, FlagValue>,
+  production: prodFlags as Record<string, FlagValue>,
+};
+
+function resolveEnvironment(): FlagEnvironment {
+  const env = process.env['NODE_ENV'] ?? 'development';
+  if (env === 'staging' || env === 'production' || env === 'test') return env;
+  return 'development';
+}
 
 /**
- * FlagClient — v1 reads from flags.default.json.
+ * FlagClient — loads environment-specific flags from static JSON files.
  * Provider integrations (LaunchDarkly, Unleash) are wired in a later sprint.
  *
  * Fallback behaviour:
  * - Core generation features: ON
  * - All billing/payments: OFF
  * - Admin: OFF
+ *
+ * Environment resolution:
+ * - development / test → flags.default.json
+ * - staging (QA)       → flags.qa.json
+ * - production         → flags.prod.json
  */
 export class FlagClient {
   private readonly flags: Record<string, FlagValue>;
+  readonly environment: FlagEnvironment;
 
   constructor(overrides?: Partial<Record<FeatureFlagKey, FlagValue>>) {
-    this.flags = { ...defaultFlags, ...overrides };
+    this.environment = resolveEnvironment();
+    const envFlags = FLAG_FILES[this.environment] ?? defaultFlags;
+    this.flags = { ...envFlags, ...overrides };
   }
 
   /**
