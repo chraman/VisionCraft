@@ -10,10 +10,52 @@ env:
   NODE_VERSION: '20'
 
 jobs:
+  # ─── Detect what changed ─────────────────────────────────────────────────
+  detect-changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      packages: ${{ steps.filter.outputs.packages }}
+      ai_service: ${{ steps.filter.outputs.ai_service }}
+      infra: ${{ steps.filter.outputs.infra }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'services/**'
+              - 'workers/**'
+              - 'packages/types/**'
+              - 'packages/utils/**'
+              - 'packages/config/**'
+            frontend:
+              - 'apps/web/**'
+              - 'apps/admin/**'
+              - 'packages/ui/**'
+              - 'packages/store/**'
+              - 'packages/api-client/**'
+              - 'packages/feature-flags/**'
+              - 'packages/types/**'
+              - 'packages/utils/**'
+            packages:
+              - 'packages/**'
+            ai_service:
+              - 'ai-service/**'
+            infra:
+              - 'infra/**'
+              - 'prisma/**'
+
   # ─── Build ────────────────────────────────────────────────────────────────
   build:
     name: Build all services
     runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.packages == 'true' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
 
@@ -42,7 +84,8 @@ jobs:
   deploy-backend:
     name: Deploy backend to Railway QA
     runs-on: ubuntu-latest
-    needs: build
+    needs: [detect-changes, build]
+    if: needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.packages == 'true' || github.event_name == 'workflow_dispatch'
     environment: qa
     steps:
       - uses: actions/checkout@v4
@@ -113,7 +156,11 @@ jobs:
   migrate-and-seed:
     name: Migrate & seed QA database
     runs-on: ubuntu-latest
-    needs: deploy-backend
+    needs: [detect-changes, deploy-backend]
+    if: |
+      always() &&
+      (needs.deploy-backend.result == 'success' || needs.deploy-backend.result == 'skipped') &&
+      (needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.infra == 'true' || github.event_name == 'workflow_dispatch')
     environment: qa
     steps:
       - uses: actions/checkout@v4
@@ -152,7 +199,8 @@ jobs:
   deploy-frontend:
     name: Deploy frontend to Vercel QA
     runs-on: ubuntu-latest
-    needs: build
+    needs: [detect-changes, build]
+    if: needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.packages == 'true' || github.event_name == 'workflow_dispatch'
     environment: qa
     outputs:
       url: ${{ steps.deploy.outputs.url }}
@@ -200,7 +248,12 @@ jobs:
   e2e:
     name: E2E tests — QA
     runs-on: ubuntu-latest
-    needs: [migrate-and-seed, deploy-frontend]
+    needs: [detect-changes, migrate-and-seed, deploy-frontend]
+    if: |
+      always() &&
+      (needs.migrate-and-seed.result == 'success' || needs.migrate-and-seed.result == 'skipped') &&
+      (needs.deploy-frontend.result == 'success' || needs.deploy-frontend.result == 'skipped') &&
+      (needs.detect-changes.outputs.backend == 'true' || needs.detect-changes.outputs.frontend == 'true' || needs.detect-changes.outputs.packages == 'true' || github.event_name == 'workflow_dispatch')
     environment: qa
     steps:
       - uses: actions/checkout@v4
@@ -223,8 +276,8 @@ jobs:
       - name: Run E2E tests against QA
         run: pnpm test:e2e
         env:
-          # Points Playwright at the live QA frontend — webServer is skipped when this is set.
-          BASE_URL: ${{ needs.deploy-frontend.outputs.url }}
+          # When deploy-frontend was skipped, fall back to the existing QA URL.
+          BASE_URL: ${{ needs.deploy-frontend.outputs.url || secrets.RAILWAY_QA_FRONTEND_URL }}
           CI: true
 
       - name: Upload Playwright report
