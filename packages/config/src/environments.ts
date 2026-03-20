@@ -12,6 +12,15 @@ function getEnvironment(): Environment {
 
 // ─── Per-environment config ─────────────────────────────────────────────────
 
+interface ServiceUrls {
+  authService: string;
+  userService: string;
+  imageService: string;
+  notificationService: string;
+  analyticsService: string;
+  aiService: string;
+}
+
 interface EnvironmentConfig {
   /** Public-facing API URL (api-gateway) */
   apiBaseUrl: string;
@@ -33,6 +42,8 @@ interface EnvironmentConfig {
   sesFromEmail: string;
   /** Sentry environment tag */
   sentryEnvironment: string;
+  /** Railway internal service URLs (separate projects per environment) */
+  serviceUrls: ServiceUrls;
 }
 
 const ENVIRONMENT_CONFIGS: Record<Environment, EnvironmentConfig> = {
@@ -47,6 +58,14 @@ const ENVIRONMENT_CONFIGS: Record<Environment, EnvironmentConfig> = {
     s3BucketUploads: 'dev-ai-images-uploads',
     sesFromEmail: 'noreply-dev@yourdomain.com',
     sentryEnvironment: 'development',
+    serviceUrls: {
+      authService: 'http://localhost:3001',
+      userService: 'http://localhost:3002',
+      imageService: 'http://localhost:3003',
+      notificationService: 'http://localhost:3004',
+      analyticsService: 'http://localhost:3005',
+      aiService: 'http://localhost:8000',
+    },
   },
   staging: {
     apiBaseUrl: 'https://qa-api.yourdomain.com',
@@ -59,6 +78,14 @@ const ENVIRONMENT_CONFIGS: Record<Environment, EnvironmentConfig> = {
     s3BucketUploads: 'qa-ai-images-uploads',
     sesFromEmail: 'noreply-qa@yourdomain.com',
     sentryEnvironment: 'staging',
+    serviceUrls: {
+      authService: 'http://auth-service-qa.railway.internal:3001',
+      userService: 'http://user-service-qa.railway.internal:3002',
+      imageService: 'http://image-service-qa.railway.internal:3003',
+      notificationService: 'http://notification-service-qa.railway.internal:3004',
+      analyticsService: 'http://analytics-service-qa.railway.internal:3005',
+      aiService: 'http://ai-service-qa.railway.internal:8000',
+    },
   },
   production: {
     apiBaseUrl: 'https://api.yourdomain.com',
@@ -71,6 +98,14 @@ const ENVIRONMENT_CONFIGS: Record<Environment, EnvironmentConfig> = {
     s3BucketUploads: 'prod-ai-images-uploads',
     sesFromEmail: 'noreply@yourdomain.com',
     sentryEnvironment: 'production',
+    serviceUrls: {
+      authService: 'http://auth-service-prod.railway.internal:3001',
+      userService: 'http://user-service-prod.railway.internal:3002',
+      imageService: 'http://image-service-prod.railway.internal:3003',
+      notificationService: 'http://notification-service-prod.railway.internal:3004',
+      analyticsService: 'http://analytics-service-prod.railway.internal:3005',
+      aiService: 'http://ai-service-prod.railway.internal:8000',
+    },
   },
 } as const;
 

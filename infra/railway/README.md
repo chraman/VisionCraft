@@ -37,14 +37,17 @@ railway up --service auth-service --environment production
 
 ## Service → Environment Matrix
 
-| Service              | QA Port | Prod Port | Internal Hostname (Railway)                     |
-|----------------------|---------|-----------|------------------------------------------------|
-| api-gateway          | 3000    | 3000      | http://api-gateway.railway.internal:3000        |
-| auth-service         | 3001    | 3001      | http://auth-service.railway.internal:3001       |
-| user-service         | 3002    | 3002      | http://user-service.railway.internal:3002       |
-| image-service        | 3003    | 3003      | http://image-service.railway.internal:3003      |
-| notification-service | 3004    | 3004      | http://notification-service.railway.internal:3004 |
-| analytics-service    | 3005    | 3005      | http://analytics-service.railway.internal:3005  |
+QA and Production run in **separate Railway projects** for full isolation.
+Service names are suffixed with the environment (`-qa`, `-prod`).
+
+| Service              | Port | QA Internal Hostname                                | Prod Internal Hostname                               |
+|----------------------|------|-----------------------------------------------------|------------------------------------------------------|
+| api-gateway          | 3000 | `http://api-gateway-qa.railway.internal:3000`       | `http://api-gateway-prod.railway.internal:3000`      |
+| auth-service         | 3001 | `http://auth-service-qa.railway.internal:3001`      | `http://auth-service-prod.railway.internal:3001`     |
+| user-service         | 3002 | `http://user-service-qa.railway.internal:3002`      | `http://user-service-prod.railway.internal:3002`     |
+| image-service        | 3003 | `http://image-service-qa.railway.internal:3003`     | `http://image-service-prod.railway.internal:3003`    |
+| notification-service | 3004 | `http://notification-service-qa.railway.internal:3004` | `http://notification-service-prod.railway.internal:3004` |
+| analytics-service    | 3005 | `http://analytics-service-qa.railway.internal:3005` | `http://analytics-service-prod.railway.internal:3005` |
 
 ## Required GitHub Secrets
 
