@@ -1,6 +1,7 @@
 [build]
 builder = "nixpacks"
-buildCommand = "cd ../.. && pnpm install --frozen-lockfile && pnpm turbo build --filter=@ai-platform/analytics-service"
+installCommand = "cd ../.. && corepack enable && pnpm install --frozen-lockfile"
+buildCommand = "cd ../.. && pnpm turbo build --filter=@ai-platform/analytics-service"
 watchPatterns = ["services/analytics-service/**", "packages/**", "pnpm-lock.yaml", "turbo.json"]
 
 [deploy]
