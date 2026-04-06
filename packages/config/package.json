@@ -20,7 +20,7 @@
   },
   "devDependencies": {
     "@ai-platform/types": "workspace:*",
-    "@types/node": "^20.17.0",
+    "@types/node": "^25.5.2",
     "typescript": "^5.7.2"
   }
 }
