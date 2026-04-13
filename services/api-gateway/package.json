@@ -15,15 +15,15 @@
     "@ai-platform/feature-flags": "workspace:*",
     "@ai-platform/types": "workspace:*",
     "@ai-platform/utils": "workspace:*",
-    "axios": "^1.7.9",
+    "axios": "^1.15.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
-    "dotenv": "^17.3.1",
+    "dotenv": "^17.4.2",
     "express": "^5.0.1",
     "helmet": "^8.0.0",
-    "ioredis": "^5.9.3",
+    "ioredis": "^5.10.1",
     "jsonwebtoken": "^9.0.2",
-    "zod": "^3.24.1"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",
