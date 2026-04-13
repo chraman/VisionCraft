@@ -36,17 +36,17 @@
     "start:backend": "turbo start --filter=@ai-platform/api-gateway --filter=@ai-platform/auth-service --filter=@ai-platform/user-service --filter=@ai-platform/image-service --filter=@ai-platform/notification-service --filter=@ai-platform/analytics-service"
   },
   "devDependencies": {
-    "@commitlint/cli": "^19.6.0",
-    "@commitlint/config-conventional": "^19.6.0",
-    "@playwright/test": "^1.49.0",
-    "@typescript-eslint/eslint-plugin": "^8.18.0",
-    "@typescript-eslint/parser": "^8.18.0",
-    "eslint": "^9.17.0",
-    "eslint-config-prettier": "^9.1.0",
+    "@commitlint/cli": "^20.5.0",
+    "@commitlint/config-conventional": "^20.5.0",
+    "@playwright/test": "^1.59.1",
+    "@typescript-eslint/eslint-plugin": "^8.58.1",
+    "@typescript-eslint/parser": "^8.58.1",
+    "eslint": "^10.2.0",
+    "eslint-config-prettier": "^10.1.8",
     "husky": "^9.1.7",
-    "lint-staged": "^15.3.0",
-    "prettier": "^3.4.2",
-    "turbo": "^2.3.3",
+    "lint-staged": "^16.4.0",
+    "prettier": "^3.8.2",
+    "turbo": "^2.9.6",
     "typescript": "^5.7.2"
   },
   "pnpm": {

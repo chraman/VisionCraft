@@ -25,7 +25,7 @@
     "@ai-platform/utils": "workspace:*",
     "@types/react": "^18.3.18",
     "react": "^18.3.1",
-    "tailwindcss": "^3.4.17",
+    "tailwindcss": "^4.2.2",
     "typescript": "^5.7.2"
   },
   "peerDependencies": {
