@@ -162,7 +162,7 @@ async function main() {
         id: imageId,
         userId: proUser.id,
         jobId: jobId,
-        url: `https://s3.us-east-1.amazonaws.com/prod-ai-images-generated/${proUser.id}/2025/01/${jobId}.webp`,
+        url: `https://s3.ap-south-1.amazonaws.com/prod-ai-images-generated/${proUser.id}/2025/01/${jobId}.webp`,
         cdnUrl: `https://cdn.example.com/${proUser.id}/2025/01/${jobId}.webp`,
         prompt: data.prompt,
         model: data.model,

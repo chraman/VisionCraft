@@ -71,7 +71,7 @@ resource "aws_ecs_task_definition" "service" {
       logDriver = "awslogs"
       options = {
         "awslogs-group"         = local.log_group
-        "awslogs-region"        = "us-east-1"
+        "awslogs-region"        = "ap-south-1"
         "awslogs-stream-prefix" = "ecs"
       }
     }

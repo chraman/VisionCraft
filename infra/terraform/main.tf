@@ -24,7 +24,7 @@ terraform {
   backend "s3" {
     bucket         = "ai-platform-terraform-state"
     key            = "infrastructure/terraform.tfstate"
-    region         = "us-east-1"
+    region         = "ap-south-1"
     dynamodb_table = "terraform-locks"
     encrypt        = true
   }
@@ -55,7 +55,7 @@ variable "environment" {
 
 variable "aws_region" {
   type    = string
-  default = "us-east-1"
+  default = "ap-south-1"
 }
 
 variable "domain_name" {

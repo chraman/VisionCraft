@@ -41,7 +41,7 @@ export const imageServiceEnvSchema = baseEnvSchema.extend({
   REDIS_URL: z.string().url(),
   AWS_ACCESS_KEY_ID: z.string().min(1),
   AWS_SECRET_ACCESS_KEY: z.string().min(1),
-  AWS_REGION: z.string().default('us-east-1'),
+  AWS_REGION: z.string().default('ap-south-1'),
   AWS_BUCKET_GENERATED: z.string().min(1),
   AWS_BUCKET_UPLOADS: z.string().min(1),
   CLOUDFRONT_DOMAIN: z.string().url(),
@@ -54,7 +54,7 @@ export const notificationServiceEnvSchema = baseEnvSchema.extend({
   SERVICE_NAME: z.literal('notification-service'),
   AWS_ACCESS_KEY_ID: z.string().min(1),
   AWS_SECRET_ACCESS_KEY: z.string().min(1),
-  AWS_REGION: z.string().default('us-east-1'),
+  AWS_REGION: z.string().default('ap-south-1'),
   AWS_SES_FROM_EMAIL: z.string().email(),
 });
 
