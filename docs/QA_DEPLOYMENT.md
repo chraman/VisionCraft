@@ -266,6 +266,8 @@ Add the following secrets to the `qa` environment:
 | `VITE_LAUNCHDARKLY_CLIENT_KEY_QA` | LaunchDarkly QA client-side key                               |
 | `VITE_SENTRY_DSN`                 | Your Sentry DSN                                               |
 | `VITE_POSTHOG_KEY`                | Your PostHog key                                              |
+| `ECS_PRIVATE_SUBNET_QA`           | `terraform output private_subnet_id`                          |
+| `ECS_APP_SG_QA`                   | `terraform output app_security_group_id`                      |
 | `TURBO_TOKEN`                     | Turborepo remote cache token (optional — speeds up CI builds) |
 | `TURBO_TEAM`                      | Turborepo team slug (optional)                                |
 

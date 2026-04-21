@@ -6,7 +6,7 @@ export const baseEnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'staging', 'production']).default('development'),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   SERVICE_NAME: z.string().min(1),
-  RAILWAY_ENVIRONMENT: z.enum(['dev', 'staging', 'production']).optional(),
+  AWS_ENVIRONMENT: z.enum(['dev', 'qa', 'staging', 'production']).optional(),
   PORT: z.coerce.number().default(3000),
 });
 
