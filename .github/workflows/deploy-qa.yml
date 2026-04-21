@@ -116,10 +116,11 @@ jobs:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/visioncraft-github-actions-deploy
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Build frontend
-        run: pnpm turbo build --filter=@ai-platform/web
+      - name: Build frontend (QA mode)
+        run: pnpm turbo build:qa --filter=@ai-platform/web
         env:
-          VITE_API_URL: ${{ secrets.VITE_API_URL_QA }}
+          VITE_APP_ENV: qa
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_URL_QA }}
           VITE_LAUNCHDARKLY_CLIENT_KEY: ${{ secrets.VITE_LAUNCHDARKLY_CLIENT_KEY_QA }}
           VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
           VITE_POSTHOG_KEY: ${{ secrets.VITE_POSTHOG_KEY }}

@@ -656,11 +656,13 @@ Stability AI → OpenAI DALL-E 3 → HuggingFace → raise `ProviderUnavailableE
 
 ### All Services
 
+Three environments: `local` (local dev) · `qa` (QA on AWS) · `prod` (production on AWS).
+
 ```bash
-NODE_ENV=development|staging|production
+APP_ENV=local|qa|prod             # Application environment discriminator
+NODE_ENV=development|production   # Node.js runtime mode (local → development, qa/prod → production)
 LOG_LEVEL=debug|info|warn|error
 SERVICE_NAME=auth-service
-AWS_ENVIRONMENT=dev|staging|production
 ```
 
 ### Auth Service

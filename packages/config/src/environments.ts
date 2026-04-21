@@ -1,34 +1,33 @@
 // ─── Environment-specific constants ──────────────────────────────────────────
 // Single source of truth for values that change per environment.
 // Import and use instead of hardcoding environment-specific strings.
+//
+// Three environments:
+//   local  — local development (NODE_ENV=development, localhost URLs)
+//   qa     — QA/staging on AWS ECS (NODE_ENV=production)
+//   prod   — production on AWS ECS (NODE_ENV=production)
+//
+// For qa and prod, URLs and bucket names are read from environment variables
+// at service startup — never hardcoded here.
 
-export type Environment = 'development' | 'staging' | 'production';
+export type AppEnv = 'local' | 'qa' | 'prod';
 
-function getEnvironment(): Environment {
-  const env = process.env['NODE_ENV'] ?? 'development';
-  if (env === 'staging' || env === 'production') return env;
-  return 'development';
+export function getAppEnv(): AppEnv {
+  const env = process.env['APP_ENV'];
+  if (env === 'qa' || env === 'prod') return env;
+  return 'local';
 }
 
-// ─── Per-environment config ─────────────────────────────────────────────────
-
-interface ServiceUrls {
-  authService: string;
-  userService: string;
-  imageService: string;
-  notificationService: string;
-  analyticsService: string;
-  aiService: string;
-}
+// ─── Config shape ─────────────────────────────────────────────────────────────
 
 interface EnvironmentConfig {
-  /** Public-facing API URL (api-gateway) */
+  /** Public-facing API URL (api-gateway / ALB) */
   apiBaseUrl: string;
-  /** Public-facing frontend URL */
+  /** Public-facing frontend URL (CloudFront domain) */
   frontendUrl: string;
   /** CloudFront CDN domain for generated images */
   cdnDomain: string;
-  /** CORS allowed origins */
+  /** CORS allowed origins for api-gateway */
   allowedOrigins: string[];
   /** Feature flag provider */
   flagProvider: 'static' | 'unleash' | 'launchdarkly';
@@ -42,86 +41,82 @@ interface EnvironmentConfig {
   sesFromEmail: string;
   /** Sentry environment tag */
   sentryEnvironment: string;
-  /** Railway internal service URLs (separate projects per environment) */
-  serviceUrls: ServiceUrls;
 }
 
-const ENVIRONMENT_CONFIGS: Record<Environment, EnvironmentConfig> = {
-  development: {
+// ─── Per-environment configs ──────────────────────────────────────────────────
+//
+// local  — hardcoded localhost values (safe; stable for any developer machine)
+// qa     — reads from process.env; defaults are fallback only (never shipped)
+// prod   — reads from process.env; defaults are fallback only (never shipped)
+//
+// Service-to-service URLs are NOT here — they are runtime env vars consumed via
+// SERVICE_URLS in constants.ts (e.g. AUTH_SERVICE_URL=http://auth-service.internal:3001).
+
+const ENVIRONMENT_CONFIGS: Record<AppEnv, EnvironmentConfig> = {
+  local: {
     apiBaseUrl: 'http://localhost:3000',
     frontendUrl: 'http://localhost:5173',
     cdnDomain: 'http://localhost:3003',
     allowedOrigins: ['http://localhost:5173', 'http://localhost:5174'],
     flagProvider: 'static',
     logLevel: 'debug',
-    s3BucketGenerated: 'dev-ai-images-generated',
-    s3BucketUploads: 'dev-ai-images-uploads',
-    sesFromEmail: 'noreply-dev@yourdomain.com',
-    sentryEnvironment: 'development',
-    serviceUrls: {
-      authService: 'http://localhost:3001',
-      userService: 'http://localhost:3002',
-      imageService: 'http://localhost:3003',
-      notificationService: 'http://localhost:3004',
-      analyticsService: 'http://localhost:3005',
-      aiService: 'http://localhost:8000',
-    },
+    s3BucketGenerated: 'local-ai-images-generated',
+    s3BucketUploads: 'local-ai-images-uploads',
+    sesFromEmail: 'noreply-local@visioncraft.io',
+    sentryEnvironment: 'local',
   },
-  staging: {
-    apiBaseUrl: 'https://qa-api.yourdomain.com',
-    frontendUrl: 'https://qa.yourdomain.com',
-    cdnDomain: 'https://qa-cdn.yourdomain.com',
-    allowedOrigins: ['https://qa.yourdomain.com'],
+
+  qa: {
+    // All values read from environment variables — set via SSM Parameter Store or .env.qa
+    apiBaseUrl: process.env['API_BASE_URL'] ?? 'https://qa.visioncraft.io',
+    frontendUrl: process.env['FRONTEND_URL'] ?? 'https://qa-app.visioncraft.io',
+    cdnDomain: process.env['CLOUDFRONT_DOMAIN'] ?? 'https://qa-cdn.visioncraft.io',
+    allowedOrigins: (process.env['ALLOWED_ORIGINS'] ?? 'https://qa-app.visioncraft.io').split(','),
     flagProvider: 'launchdarkly',
     logLevel: 'info',
-    s3BucketGenerated: 'qa-ai-images-generated',
-    s3BucketUploads: 'qa-ai-images-uploads',
-    sesFromEmail: 'noreply-qa@yourdomain.com',
-    sentryEnvironment: 'staging',
-    serviceUrls: {
-      authService: 'http://auth-service-qa.railway.internal:3001',
-      userService: 'http://user-service-qa.railway.internal:3002',
-      imageService: 'http://image-service-qa.railway.internal:3003',
-      notificationService: 'http://notification-service-qa.railway.internal:3004',
-      analyticsService: 'http://analytics-service-qa.railway.internal:3005',
-      aiService: 'http://ai-service-qa.railway.internal:8000',
-    },
+    s3BucketGenerated: process.env['AWS_BUCKET_GENERATED'] ?? 'qa-ai-images-generated',
+    s3BucketUploads: process.env['AWS_BUCKET_UPLOADS'] ?? 'qa-ai-images-uploads',
+    sesFromEmail: process.env['AWS_SES_FROM_EMAIL'] ?? 'noreply-qa@visioncraft.io',
+    sentryEnvironment: 'qa',
   },
-  production: {
-    apiBaseUrl: 'https://api.yourdomain.com',
-    frontendUrl: 'https://yourdomain.com',
-    cdnDomain: 'https://cdn.yourdomain.com',
-    allowedOrigins: ['https://yourdomain.com', 'https://www.yourdomain.com'],
+
+  prod: {
+    // All values read from environment variables — set via SSM Parameter Store or .env.prod
+    apiBaseUrl: process.env['API_BASE_URL'] ?? 'https://api.visioncraft.io',
+    frontendUrl: process.env['FRONTEND_URL'] ?? 'https://visioncraft.io',
+    cdnDomain: process.env['CLOUDFRONT_DOMAIN'] ?? 'https://cdn.visioncraft.io',
+    allowedOrigins: (
+      process.env['ALLOWED_ORIGINS'] ?? 'https://visioncraft.io,https://www.visioncraft.io'
+    ).split(','),
     flagProvider: 'launchdarkly',
     logLevel: 'warn',
-    s3BucketGenerated: 'prod-ai-images-generated',
-    s3BucketUploads: 'prod-ai-images-uploads',
-    sesFromEmail: 'noreply@yourdomain.com',
-    sentryEnvironment: 'production',
-    serviceUrls: {
-      authService: 'http://auth-service-prod.railway.internal:3001',
-      userService: 'http://user-service-prod.railway.internal:3002',
-      imageService: 'http://image-service-prod.railway.internal:3003',
-      notificationService: 'http://notification-service-prod.railway.internal:3004',
-      analyticsService: 'http://analytics-service-prod.railway.internal:3005',
-      aiService: 'http://ai-service-prod.railway.internal:8000',
-    },
+    s3BucketGenerated: process.env['AWS_BUCKET_GENERATED'] ?? 'prod-ai-images-generated',
+    s3BucketUploads: process.env['AWS_BUCKET_UPLOADS'] ?? 'prod-ai-images-uploads',
+    sesFromEmail: process.env['AWS_SES_FROM_EMAIL'] ?? 'noreply@visioncraft.io',
+    sentryEnvironment: 'prod',
   },
-} as const;
+};
 
 /**
  * Get the configuration for the current environment.
- * Values can be overridden by environment variables where applicable.
+ * Reads APP_ENV from process.env; defaults to 'local'.
  */
 export function getEnvironmentConfig(): EnvironmentConfig {
-  return ENVIRONMENT_CONFIGS[getEnvironment()];
+  return ENVIRONMENT_CONFIGS[getAppEnv()];
 }
 
 /**
  * Get the configuration for a specific environment.
  */
-export function getConfigForEnvironment(env: Environment): EnvironmentConfig {
+export function getConfigForEnvironment(env: AppEnv): EnvironmentConfig {
   return ENVIRONMENT_CONFIGS[env];
 }
 
-export { getEnvironment };
+// ─── Legacy alias — remove once all callers use getAppEnv() ──────────────────
+/** @deprecated Use getAppEnv() instead */
+export function getEnvironment(): AppEnv {
+  return getAppEnv();
+}
+
+/** @deprecated Use AppEnv instead */
+export type Environment = AppEnv;

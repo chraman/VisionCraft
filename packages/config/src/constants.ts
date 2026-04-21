@@ -20,8 +20,8 @@ export const SERVICE_PORTS = {
 // so tests can override process.env without module-level caching.
 //
 // Dev fallback:  http://localhost:<port>
-// Staging/Prod:  set the env var to the Railway internal hostname, e.g.
-//                AUTH_SERVICE_URL=http://auth-service.railway.internal:3001
+// QA/Prod:       set the env var to the ECS Service Connect hostname, e.g.
+//                AUTH_SERVICE_URL=http://auth-service.internal:3001
 
 export const SERVICE_URLS = {
   AUTH: () => process.env['AUTH_SERVICE_URL'] ?? `http://localhost:${SERVICE_PORTS.AUTH}`,
