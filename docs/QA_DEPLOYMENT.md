@@ -1,6 +1,6 @@
 # QA Environment — Deployment Guide
 
-This document covers everything needed to set up and deploy the QA environment, which runs the full stack on the internet: Railway (backend + DB + Redis) and Vercel (frontend).
+This document covers everything needed to set up and deploy the QA environment, which runs the full stack on AWS: ECS Fargate (backend), RDS PostgreSQL + ElastiCache Redis (data layer), and S3 + CloudFront (frontend).
 
 Deploying to QA is a single `git push origin qa` once the one-time setup below is complete.
 
@@ -11,13 +11,10 @@ Deploying to QA is a single `git push origin qa` once the one-time setup below i
 1. [How it works](#how-it-works)
 2. [Prerequisites](#prerequisites)
 3. [One-time setup](#one-time-setup)
-   - [Step 1 — Railway project](#step-1--railway-project)
-   - [Step 2 — Managed databases](#step-2--managed-databases)
-   - [Step 3 — Backend services](#step-3--backend-services)
-   - [Step 4 — Environment variables](#step-4--environment-variables)
-   - [Step 5 — Public domain for API gateway](#step-5--public-domain-for-api-gateway)
-   - [Step 6 — Vercel project](#step-6--vercel-project)
-   - [Step 7 — GitHub secrets](#step-7--github-secrets)
+   - [Step 1 — Terraform infrastructure](#step-1--terraform-infrastructure)
+   - [Step 2 — Secrets and parameters](#step-2--secrets-and-parameters)
+   - [Step 3 — ECR repositories and initial images](#step-3--ecr-repositories-and-initial-images)
+   - [Step 4 — GitHub secrets](#step-4--github-secrets)
 4. [Deploying to QA](#deploying-to-qa)
 5. [Running QA tests manually](#running-qa-tests-manually)
 6. [Monitoring a QA deployment](#monitoring-a-qa-deployment)
@@ -31,34 +28,42 @@ Deploying to QA is a single `git push origin qa` once the one-time setup below i
 Pushing to the `qa` branch triggers the `.github/workflows/deploy-qa.yml` workflow, which:
 
 1. Typechecks and builds all packages via Turborepo
-2. Deploys all 6 backend services to Railway (`qa` environment) in parallel
-3. Deploys the frontend to Vercel (preview deployment)
-4. Waits for the API gateway health check to pass
-5. Runs `prisma migrate deploy` against the QA database
-6. Runs the seed script — creates `alice`, `bob`, and `admin` test accounts
-7. Runs all 5 Playwright E2E auth tests against the live URLs
-8. Uploads a Playwright HTML report as a workflow artifact
+2. Builds Docker images for all 8 services in parallel (matrix job) → pushes to ECR
+3. Deploys all services to the `visioncraft-qa` ECS cluster via rolling update
+4. Deploys the frontend to S3 + CloudFront (QA distribution) and posts a preview URL
+5. Waits for the ALB health check to pass (`GET /health` on api-gateway)
+6. Runs `prisma migrate deploy` as a one-off ECS task (inside the VPC, with RDS access)
+7. Runs the seed script — creates `alice`, `bob`, and `admin` test accounts
+8. Runs all Playwright E2E tests against the live URLs
+9. Uploads a Playwright HTML report as a workflow artifact
 
-The workflow does **not** touch the production environment. Railway and Vercel keep QA and production completely isolated.
+The workflow does **not** touch the production environment. QA and production are separate ECS clusters, RDS instances, and ElastiCache clusters.
 
 ```
 git push origin qa
        │
        ▼
-┌─────────────────────────────────────────────────┐
-│  GitHub Actions — deploy-qa.yml                 │
-│                                                 │
-│  build ──► deploy-backend ──► migrate-and-seed  │
-│         └► deploy-frontend ──────────────────►  │
-│                                                 │
-│                              └► e2e (Playwright)│
-└─────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────┐
+│  GitHub Actions — deploy-qa.yml                    │
+│                                                    │
+│  build ──► build-and-push (matrix, 8 images)       │
+│         └► deploy-frontend ──────────────────►     │
+│                    │                               │
+│                    ▼                               │
+│             ECS rolling deploy (8 services)        │
+│                    │                               │
+│                    ▼                               │
+│             migrate-and-seed (ECS one-off task)    │
+│                    │                               │
+│                    ▼                               │
+│             e2e (Playwright)                       │
+└────────────────────────────────────────────────────┘
        │                 │
        ▼                 ▼
-  Railway QA         Vercel Preview
-  (6 services        (frontend at a
-  + Postgres         unique HTTPS URL)
-  + Redis)
+  ECS Fargate QA    S3 + CloudFront
+  (8 services       (frontend at
+  + RDS             qa.visioncraft.io)
+  + ElastiCache)
 ```
 
 ---
@@ -68,14 +73,26 @@ git push origin qa
 The following tools must be installed locally for the one-time setup steps:
 
 ```bash
-pnpm add -g @railway/cli   # Railway CLI
-pnpm add -g vercel         # Vercel CLI
+# AWS CLI v2
+brew install awscli        # macOS
+# or: https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html
+
+# Terraform >= 1.6
+brew install terraform     # macOS
+# or: https://developer.hashicorp.com/terraform/install
+
+# Docker (for building images locally during setup)
+# https://docs.docker.com/get-docker/
+
+# Configure AWS credentials
+aws configure
+# AWS Access Key ID, Secret Access Key, region: us-east-1
 ```
 
-You also need accounts on:
+You also need:
 
-- [railway.app](https://railway.app)
-- [vercel.com](https://vercel.com)
+- An AWS account with permissions to create VPC, ECS, RDS, ElastiCache, ALB, ECR, S3, CloudFront, IAM, Secrets Manager, SSM, and ACM resources
+- A GitHub repository with Actions enabled
 
 ---
 
@@ -85,172 +102,174 @@ Complete these steps once. After this, all future deploys are automated.
 
 ---
 
-### Step 1 — Railway project
+### Step 1 — Terraform infrastructure
 
-1. Log in to [railway.app](https://railway.app) and create a new project named **visioncraft**
-2. Inside the project, click the environment selector (top-left) → **New Environment** → name it `qa`
-
----
-
-### Step 2 — Managed databases
-
-Inside the `qa` environment:
-
-1. Click **New** → **Database** → **Add PostgreSQL**
-   - After it provisions, open the Postgres service → **Variables** tab → copy `DATABASE_URL`
-2. Click **New** → **Database** → **Add Redis**
-   - After it provisions, open the Redis service → **Variables** tab → copy `REDIS_URL`
-
-Save both connection strings — you will need them in Steps 4 and 7.
-
----
-
-### Step 3 — Backend services
-
-This is a Turborepo monorepo — all services live in the same repository. Railway handles this by giving each service its own **Root Directory** setting, which tells Railway which subdirectory to treat as the service root. The `railway.toml` in each service directory then navigates back up to the monorepo root (`cd ../..`) so the build can use pnpm workspaces and Turborepo correctly.
-
-For each of the 6 services, click **New** → **GitHub Repo** → select this repo, then configure:
-
-| Service name in Railway | Root Directory setting          |
-| ----------------------- | ------------------------------- |
-| `auth-service`          | `services/auth-service`         |
-| `api-gateway`           | `services/api-gateway`          |
-| `user-service`          | `services/user-service`         |
-| `image-service`         | `services/image-service`        |
-| `notification-service`  | `services/notification-service` |
-| `analytics-service`     | `services/analytics-service`    |
-
-For each service:
-
-1. Go to **Settings** → **Source** → set **Root Directory** to the path in the table above
-2. Railway will pick up the `railway.toml` from that directory automatically — no build or start command to enter manually
-3. **Disable auto-deploy**: Settings → Source → toggle off **Deploy on Push** — the `deploy-qa.yml` GitHub Actions workflow controls all deploys
-
-**How the monorepo build works end-to-end:**
-
-```
-GitHub Actions
-  └─ railway up --service auth-service   ← runs from repo root, uploads full monorepo
-
-Railway receives the full repo
-  └─ CDs into services/auth-service      ← Root Directory setting
-       └─ runs buildCommand:
-            cd ../..                     ← back to monorepo root
-            pnpm install --frozen-lockfile
-            pnpm turbo build --filter=@ai-platform/auth-service
-                                         ← turbo builds only auth-service + its
-                                            workspace dependencies (packages/*)
-  └─ runs startCommand from services/auth-service:
-       node dist/index.js                ← dist/ produced by the turbo build above
-```
-
-Each `railway.toml` also declares `watchPatterns` — Railway uses these to skip a rebuild if the push didn't touch that service's files or the shared `packages/` directory.
-
----
-
-### Step 4 — Environment variables
-
-In the Railway dashboard, open each service → **Variables** → add the values below.
-
-#### All services (add to every service)
-
-```
-NODE_ENV=production
-RAILWAY_ENVIRONMENT=qa
-LOG_LEVEL=info
-DATABASE_URL=<paste from Step 2>
-REDIS_URL=<paste from Step 2>
-```
-
-#### auth-service (additional)
-
-```
-JWT_PRIVATE_KEY=<RS256 PEM private key — paste with literal \n for newlines>
-JWT_PUBLIC_KEY=<RS256 PEM public key — paste with literal \n for newlines>
-JWT_ACCESS_TTL=900
-JWT_REFRESH_TTL=604800
-GOOGLE_CLIENT_ID=<your Google OAuth client ID>
-GOOGLE_CLIENT_SECRET=<your Google OAuth client secret>
-GOOGLE_CALLBACK_URL=https://<api-gateway-qa-domain>/api/v1/auth/google/callback
-```
-
-> To generate fresh RS256 keys:
->
-> ```bash
-> openssl genpkey -algorithm RSA -out private.pem -pkeyopt rsa_keygen_bits:2048
-> openssl rsa -pubout -in private.pem -out public.pem
-> ```
->
-> Copy the file contents and replace real newlines with `\n` before pasting into Railway.
-
-#### api-gateway (additional)
-
-Use Railway's private hostnames for all service-to-service URLs. Traffic on `.railway.internal` stays within Railway's private network and never goes over the internet.
-
-```
-JWT_PUBLIC_KEY=<same public key as auth-service>
-AUTH_SERVICE_URL=http://auth-service.railway.internal:3001
-USER_SERVICE_URL=http://user-service.railway.internal:3002
-IMAGE_SERVICE_URL=http://image-service.railway.internal:3003
-NOTIFICATION_SERVICE_URL=http://notification-service.railway.internal:3004
-ANALYTICS_SERVICE_URL=http://analytics-service.railway.internal:3005
-ALLOWED_ORIGINS=https://<your-vercel-qa-domain>
-```
-
-> You can set `ALLOWED_ORIGINS` after Step 6 when you have the Vercel domain.
-
----
-
-### Step 5 — Public domain for API gateway
-
-Only the API gateway should be publicly reachable. All other services communicate over the private Railway network.
-
-1. Open the `api-gateway` service → **Settings** → **Networking**
-2. Click **Generate Domain**
-3. Copy the generated URL (e.g. `https://api-gateway-qa-production.up.railway.app`)
-
-You will use this URL as `RAILWAY_QA_API_URL` in Step 7, and as the value for `VITE_API_URL` in Vercel.
-
----
-
-### Step 6 — Vercel project
-
-Link the repo to Vercel and configure the QA environment variables:
+Apply Terraform to provision the full QA environment:
 
 ```bash
-cd apps/web
-vercel link
+cd infra/terraform/environments/qa
+
+# Initialize — downloads providers, configures S3 state backend
+terraform init
+
+# Review what will be created
+terraform plan
+
+# Apply — creates VPC, ECS cluster, RDS, ElastiCache, ALB, ECR repos, IAM roles,
+#          S3 frontend bucket, CloudFront distribution, Secrets Manager stubs, SSM params
+terraform apply
 ```
 
-Follow the prompts (create a new project or link to existing). After linking, `.vercel/project.json` is created — note the `projectId` and `orgId` values for Step 7.
+After `terraform apply` completes, note these outputs — you will need them:
 
-In the Vercel dashboard → your project → **Settings** → **Environment Variables**, add these for the **Preview** environment:
-
+```bash
+terraform output alb_dns_name          # e.g. visioncraft-qa-alb-123456.us-east-1.elb.amazonaws.com
+terraform output cloudfront_domain     # e.g. d1abc123.cloudfront.net
+terraform output ecr_registry          # e.g. 123456789.dkr.ecr.us-east-1.amazonaws.com
+terraform output ecs_cluster_name      # visioncraft-qa
 ```
-VITE_API_URL=https://<api-gateway-qa-domain from Step 5>
-VITE_LAUNCHDARKLY_CLIENT_KEY=<your LaunchDarkly QA client key>
-VITE_SENTRY_DSN=<your Sentry DSN>
-VITE_POSTHOG_KEY=<your PostHog key>
+
+The ALB DNS name is your QA API endpoint. The CloudFront domain is your QA frontend URL.
+
+---
+
+### Step 2 — Secrets and parameters
+
+Terraform creates Secrets Manager secrets and SSM parameters as empty stubs. Populate them with real values:
+
+#### Secrets Manager (sensitive values)
+
+```bash
+# Database URL — from terraform output rds_endpoint
+aws secretsmanager put-secret-value \
+  --secret-id visioncraft/qa/shared/database-url \
+  --secret-string "postgresql://visioncraft:PASSWORD@RDS_ENDPOINT:5432/aiplatform"
+
+# Redis URL — from terraform output elasticache_endpoint
+aws secretsmanager put-secret-value \
+  --secret-id visioncraft/qa/shared/redis-url \
+  --secret-string "redis://ELASTICACHE_ENDPOINT:6379"
+
+# JWT keys (generate fresh RS256 keys)
+openssl genpkey -algorithm RSA -out private.pem -pkeyopt rsa_keygen_bits:2048
+openssl rsa -pubout -in private.pem -out public.pem
+
+aws secretsmanager put-secret-value \
+  --secret-id visioncraft/qa/auth-service/jwt-private-key \
+  --secret-string "$(cat private.pem)"
+
+aws secretsmanager put-secret-value \
+  --secret-id visioncraft/qa/shared/jwt-public-key \
+  --secret-string "$(cat public.pem)"
+
+# Google OAuth
+aws secretsmanager put-secret-value \
+  --secret-id visioncraft/qa/auth-service/google-client-id \
+  --secret-string "<your-google-client-id>"
+
+aws secretsmanager put-secret-value \
+  --secret-id visioncraft/qa/auth-service/google-client-secret \
+  --secret-string "<your-google-client-secret>"
+
+# AI provider keys
+aws secretsmanager put-secret-value \
+  --secret-id visioncraft/qa/ai-service/stability-api-key \
+  --secret-string "<your-stability-api-key>"
+
+aws secretsmanager put-secret-value \
+  --secret-id visioncraft/qa/ai-service/openai-api-key \
+  --secret-string "<your-openai-api-key>"
+```
+
+#### SSM Parameter Store (non-sensitive config)
+
+```bash
+# Google OAuth callback URL — uses the ALB domain from terraform output
+aws ssm put-parameter \
+  --name /visioncraft/qa/auth-service/google-callback-url \
+  --value "https://$(terraform output -raw alb_dns_name)/api/v1/auth/google/callback" \
+  --type String
+
+# CORS allowed origins — uses the CloudFront domain from terraform output
+aws ssm put-parameter \
+  --name /visioncraft/qa/api-gateway/allowed-origins \
+  --value "https://$(terraform output -raw cloudfront_domain)" \
+  --type String
+
+# LaunchDarkly SDK key
+aws ssm put-parameter \
+  --name /visioncraft/qa/shared/launchdarkly-sdk-key \
+  --value "<your-launchdarkly-qa-sdk-key>" \
+  --type String
 ```
 
 ---
 
-### Step 7 — GitHub secrets
+### Step 3 — ECR repositories and initial images
+
+Build and push an initial image for each service so ECS can start the tasks for the first time:
+
+```bash
+# Log in to ECR
+aws ecr get-login-password --region us-east-1 | \
+  docker login --username AWS --password-stdin $(terraform output -raw ecr_registry)
+
+ECR=$(terraform output -raw ecr_registry)
+
+# Build and push all 8 services (run from monorepo root)
+for service in api-gateway auth-service user-service image-service notification-service analytics-service; do
+  docker build -f services/$service/Dockerfile -t $ECR/visioncraft/$service:latest .
+  docker push $ECR/visioncraft/$service:latest
+done
+
+# image-worker
+docker build -f workers/image-worker/Dockerfile -t $ECR/visioncraft/image-worker:latest .
+docker push $ECR/visioncraft/image-worker:latest
+
+# ai-service (Python — build from ai-service/ directory)
+docker build -f ai-service/Dockerfile -t $ECR/visioncraft/ai-service:latest ai-service/
+docker push $ECR/visioncraft/ai-service:latest
+```
+
+After pushing initial images, run the initial database migration:
+
+```bash
+# Run prisma migrate deploy as a one-off ECS task
+aws ecs run-task \
+  --cluster visioncraft-qa \
+  --task-definition visioncraft-qa-migration \
+  --launch-type FARGATE \
+  --network-configuration "awsvpcConfiguration={subnets=[PRIVATE_SUBNET_ID],securityGroups=[APP_SG_ID]}" \
+  --overrides '{"containerOverrides":[{"name":"auth-service","command":["sh","-c","pnpm prisma migrate deploy"]}]}'
+```
+
+The subnet ID and security group ID are in the Terraform outputs.
+
+---
+
+### Step 4 — GitHub secrets
 
 Go to your GitHub repo → **Settings** → **Environments** → **New environment** → name it `qa`.
 
 Add the following secrets to the `qa` environment:
 
-| Secret                    | Where to find it                                                                       |
-| ------------------------- | -------------------------------------------------------------------------------------- |
-| `RAILWAY_TOKEN`           | railway.app → Account Settings → Tokens → New Token                                    |
-| `RAILWAY_QA_API_URL`      | The public domain from Step 5, e.g. `https://api-gateway-qa-production.up.railway.app` |
-| `RAILWAY_QA_DATABASE_URL` | Postgres `DATABASE_URL` from Step 2                                                    |
-| `VERCEL_TOKEN`            | vercel.com → Settings → Tokens → Create                                                |
-| `VERCEL_ORG_ID`           | `orgId` from `apps/web/.vercel/project.json`                                           |
-| `VERCEL_PROJECT_ID`       | `projectId` from `apps/web/.vercel/project.json`                                       |
-| `TURBO_TOKEN`             | Turborepo remote cache token (optional — speeds up CI builds)                          |
-| `TURBO_TEAM`              | Turborepo team slug (optional)                                                         |
+| Secret                            | Where to find it                                              |
+| --------------------------------- | ------------------------------------------------------------- |
+| `AWS_ACCOUNT_ID`                  | AWS console → top-right account menu                          |
+| `AWS_REGION`                      | `us-east-1` (or your chosen region)                           |
+| `ECR_REGISTRY`                    | `terraform output ecr_registry`                               |
+| `ECS_CLUSTER_QA`                  | `visioncraft-qa`                                              |
+| `ALB_QA_URL`                      | `https://$(terraform output alb_dns_name)`                    |
+| `CF_DISTRIBUTION_ID_QA`           | `terraform output cloudfront_distribution_id`                 |
+| `S3_FRONTEND_BUCKET_QA`           | `visioncraft-frontend-qa`                                     |
+| `VITE_API_URL_QA`                 | Same as `ALB_QA_URL` above                                    |
+| `VITE_LAUNCHDARKLY_CLIENT_KEY_QA` | LaunchDarkly QA client-side key                               |
+| `VITE_SENTRY_DSN`                 | Your Sentry DSN                                               |
+| `VITE_POSTHOG_KEY`                | Your PostHog key                                              |
+| `TURBO_TOKEN`                     | Turborepo remote cache token (optional — speeds up CI builds) |
+| `TURBO_TEAM`                      | Turborepo team slug (optional)                                |
+
+> **No `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY` needed.** The CI workflow uses GitHub OIDC to assume an IAM role (`visioncraft-github-actions-deploy`) provisioned by Terraform. This is more secure than long-lived credentials.
 
 ---
 
@@ -274,12 +293,12 @@ Or trigger a deploy without a code change:
 
 **GitHub → Actions → Deploy QA → Run workflow → Run workflow**
 
-The workflow takes approximately 5–8 minutes end to end. When it completes:
+The workflow takes approximately 8–12 minutes end to end. When it completes:
 
-- All backend services are running on Railway QA
-- The frontend is live at the Vercel preview URL (printed in the `deploy-frontend` job output)
+- All 8 services are running on `visioncraft-qa` ECS cluster
+- The frontend is live at the CloudFront QA URL (printed in the `deploy-frontend` job output)
 - The QA database has been migrated and seeded with test accounts
-- All 5 E2E tests have passed against the live URLs
+- All Playwright E2E tests have passed against the live URLs
 
 ---
 
@@ -291,17 +310,17 @@ To run Playwright tests against the live QA environment without triggering a ful
 pnpm install
 pnpm exec playwright install --with-deps chromium firefox
 
-# Run all auth tests
-BASE_URL=https://<vercel-qa-url> pnpm test:e2e
+# Run all E2E tests
+BASE_URL=https://<cloudfront-qa-domain> pnpm test:e2e
 
 # Run a single test file
-BASE_URL=https://<vercel-qa-url> pnpm exec playwright test e2e/auth.test.ts
+BASE_URL=https://<cloudfront-qa-domain> pnpm exec playwright test e2e/auth.test.ts
 
 # Open interactive Playwright UI
-BASE_URL=https://<vercel-qa-url> pnpm exec playwright test --ui
+BASE_URL=https://<cloudfront-qa-domain> pnpm exec playwright test --ui
 
 # Run on a single browser
-BASE_URL=https://<vercel-qa-url> pnpm exec playwright test --project=chromium
+BASE_URL=https://<cloudfront-qa-domain> pnpm exec playwright test --project=chromium
 ```
 
 When `BASE_URL` is set, Playwright skips starting local services and runs directly against the live environment.
@@ -324,21 +343,32 @@ GitHub → Actions → Deploy QA → select the latest run
 **Playwright report:**
 If any E2E test fails, download the `playwright-report` artifact from the workflow summary. It includes screenshots and full traces for every failed test.
 
-**Railway logs:**
+**CloudWatch Logs (replaces `railway logs`):**
 
 ```bash
 # Tail logs for a specific service
-railway logs --service auth-service --environment qa
-railway logs --service api-gateway --environment qa
+aws logs tail /ecs/visioncraft-qa/auth-service --follow
+aws logs tail /ecs/visioncraft-qa/api-gateway --follow
 
-# Or view logs in the Railway dashboard
-# railway.app → your project → qa environment → select service → Logs tab
+# Or view in CloudWatch console:
+# AWS Console → CloudWatch → Log groups → /ecs/visioncraft-qa/<service>
 ```
 
 **Health checks:**
 
 ```bash
-curl https://<api-gateway-qa-domain>/health
+# Via ALB DNS name
+curl https://<alb-qa-dns>/health
+
+# Or via the CloudFront domain if api requests are proxied
+curl https://<cf-qa-domain>/api/health
+```
+
+**ECS service status:**
+
+```bash
+aws ecs list-tasks --cluster visioncraft-qa --service-name auth-service
+aws ecs describe-tasks --cluster visioncraft-qa --tasks <task-arn>
 ```
 
 ---
@@ -348,72 +378,78 @@ curl https://<api-gateway-qa-domain>/health
 To wipe all QA data and re-seed fresh test accounts:
 
 ```bash
-# Drop and recreate all tables, then re-apply all migrations
-cd services/auth-service
-DATABASE_URL="<RAILWAY_QA_DATABASE_URL>" pnpm prisma migrate reset --force
-
-# Re-seed
-cd ../../infra/scripts
-DATABASE_URL="<RAILWAY_QA_DATABASE_URL>" pnpm seed
+# Run prisma migrate reset as a one-off ECS task
+aws ecs run-task \
+  --cluster visioncraft-qa \
+  --task-definition visioncraft-qa-migration \
+  --launch-type FARGATE \
+  --network-configuration "awsvpcConfiguration={subnets=[PRIVATE_SUBNET_ID],securityGroups=[APP_SG_ID]}" \
+  --overrides '{"containerOverrides":[{"name":"auth-service","command":["sh","-c","pnpm prisma migrate reset --force && cd ../../infra/scripts && pnpm seed"]}]}'
 ```
 
 > `prisma migrate reset` drops all data. Never run this against production.
 
-Alternatively, re-run just the seed (wipes existing rows and re-inserts):
-
-```bash
-cd infra/scripts
-DATABASE_URL="<RAILWAY_QA_DATABASE_URL>" pnpm seed
-```
-
-The seed script deletes all rows before inserting, so running it again is safe and idempotent.
+Alternatively, re-run just the seed (wipes existing rows and re-inserts). The seed script is idempotent.
 
 ---
 
 ## Troubleshooting
 
-### The `deploy-backend` job fails on "railway up"
+### The `build-and-push` job fails — Docker build error
 
-- Verify `RAILWAY_TOKEN` secret is set correctly in the `qa` GitHub environment
-- Confirm the service name in Railway exactly matches the `--service` flag in the workflow (e.g. `auth-service`)
-- Check that **Deploy on Push** is disabled in Railway — if Railway is already deploying, the CLI may conflict
+- Confirm you are running `docker build` from the monorepo root (`.`), not from the service directory
+- Verify `pnpm-lock.yaml` is committed and up-to-date — the Dockerfile uses `--frozen-lockfile`
+- Check if any new `packages/` dependency was added without running `pnpm install` first
 
 ### The health check poll times out
 
-The workflow polls `RAILWAY_QA_API_URL/health` for up to 5 minutes. If it times out:
+The workflow polls `ALB_QA_URL/health` for up to 5 minutes. If it times out:
 
-- Check Railway logs for startup errors: `railway logs --service api-gateway --environment qa`
-- Confirm all required env vars are set on the `api-gateway` service (missing `JWT_PUBLIC_KEY` or service URLs are common causes)
-- Verify `api-gateway` has a public domain assigned (Step 5)
+- Check CloudWatch Logs for startup errors: `aws logs tail /ecs/visioncraft-qa/api-gateway --follow`
+- Confirm all required secrets are populated in Secrets Manager (missing `JWT_PUBLIC_KEY` or service URLs are common causes)
+- Confirm ECS tasks are in RUNNING state: `aws ecs list-tasks --cluster visioncraft-qa`
+- Check the ALB target group health: AWS Console → EC2 → Target Groups → select QA target group
 
-### Migrations fail
+### Migrations fail — can't reach database
 
 ```
 Error: P1001: Can't reach database server
 ```
 
-- Confirm `RAILWAY_QA_DATABASE_URL` secret is correct and the Railway Postgres service is running
-- The connection string must be the **external** URL (used by GitHub Actions runners), not the `.railway.internal` URL (which only works inside Railway's private network)
+- Confirm the ECS migration task is running in the private subnet (same VPC as RDS)
+- Verify `visioncraft/qa/shared/database-url` secret has the correct RDS internal hostname
+- The `DATABASE_URL` must use the RDS **internal** hostname (not a public endpoint) — RDS has no public access
 
 ### E2E tests fail — login returns 401
 
-The seed script uses a bcrypt hash for `password123`. If the hash does not match, re-run the seed after ensuring `bcrypt` is installed in `infra/scripts`:
+The seed script uses a bcrypt hash for `password123`. If the hash does not match:
 
 ```bash
-cd infra/scripts
-DATABASE_URL="<RAILWAY_QA_DATABASE_URL>" pnpm seed
+# Re-run the seed via ECS one-off task (see Resetting section above)
 ```
 
-If the problem persists, check that `auth-service` is using the same bcrypt compare logic as the seed hash format (`$2b$12$...`).
-
-### Vercel deploy fails — missing env vars
-
-Verify that all `VITE_*` variables are set in the Vercel dashboard under the **Preview** environment (not Production). The QA deploy uses Vercel preview deployments.
+If the problem persists, check that `auth-service` bcrypt compare logic matches the seed hash format (`$2b$12$...`).
 
 ### Frontend cannot reach the API — CORS error
 
-Update the `ALLOWED_ORIGINS` variable on the `api-gateway` Railway service to include the Vercel preview domain. Note that Vercel preview URLs change per-deploy — use a wildcard pattern or a fixed QA alias:
+Update the `ALLOWED_ORIGINS` SSM parameter to include the CloudFront domain:
 
+```bash
+aws ssm put-parameter \
+  --name /visioncraft/qa/api-gateway/allowed-origins \
+  --value "https://<cloudfront-qa-domain>" \
+  --type String \
+  --overwrite
 ```
-ALLOWED_ORIGINS=https://visioncraft-qa.vercel.app,https://*.vercel.app
+
+Then force a new ECS deployment for api-gateway so it picks up the new value:
+
+```bash
+aws ecs update-service --cluster visioncraft-qa --service api-gateway --force-new-deployment
 ```
+
+### GitHub OIDC authentication fails
+
+- Verify the `visioncraft-github-actions-deploy` IAM role exists (created by Terraform)
+- Confirm the role trust policy allows the correct GitHub repo and branch: `repo:your-org/visioncraft:environment:qa`
+- Check that `aws-actions/configure-aws-credentials@v4` is using `role-to-assume` (not access keys)

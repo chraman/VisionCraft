@@ -8,17 +8,17 @@
 
 ## 1. Project Identity
 
-| Field | Value |
-|---|---|
-| Project | AI Image Creation Platform |
-| HLD Version | v3.0 — FINAL |
-| Frontend | React 18 + TypeScript · hosted on **Vercel** |
-| Backend | Node.js microservices · hosted on **Railway** |
-| AI Service | FastAPI (Python 3.11) · hosted on **Railway** |
-| Monorepo | Turborepo + pnpm workspaces |
-| Node version | 20 LTS |
-| Python version | 3.11 |
-| Package manager | pnpm (never npm, never yarn) |
+| Field           | Value                                                 |
+| --------------- | ----------------------------------------------------- |
+| Project         | AI Image Creation Platform                            |
+| HLD Version     | v3.0 — FINAL                                          |
+| Frontend        | React 18 + TypeScript · hosted on **S3 + CloudFront** |
+| Backend         | Node.js microservices · hosted on **ECS Fargate**     |
+| AI Service      | FastAPI (Python 3.11) · hosted on **ECS Fargate**     |
+| Monorepo        | Turborepo + pnpm workspaces                           |
+| Node version    | 20 LTS                                                |
+| Python version  | 3.11                                                  |
+| Package manager | pnpm (never npm, never yarn)                          |
 
 ---
 
@@ -48,8 +48,8 @@ ai-image-platform/
 ├── workers/
 │   └── image-worker/               # BullMQ worker — consumes generation queue
 ├── infra/
-│   ├── terraform/                  # AWS S3, CloudFront, SES bootstrap only
-│   ├── railway/                    # railway.toml per service
+│   ├── terraform/                  # Full AWS infra — VPC, ECS, RDS, ElastiCache, ALB, S3, CloudFront
+│   ├── railway/                    # Deprecated — services now run on ECS Fargate
 │   └── scripts/                    # DB seed, migration helpers, dev utilities
 ├── e2e/                            # Playwright test suite — all 8 critical flows
 ├── docs/
@@ -68,16 +68,16 @@ ai-image-platform/
 
 These are hard rules. Never violate them.
 
-| Package | Can import | Cannot import |
-|---|---|---|
-| `apps/web` | `packages/*` · service types only | Service runtime code directly |
-| `apps/admin` | `packages/*` · service types only | Service runtime code directly |
-| `packages/ui` | `packages/types` · `packages/utils` | `apps/*` · `services/*` |
-| `packages/feature-flags` | `packages/types` | `apps/*` · `services/*` |
-| `packages/store` | `packages/types` · `packages/api-client` | `apps/*` |
-| `packages/api-client` | `packages/types` | `apps/*` · `services/*` |
-| `services/*` | `packages/types` · `packages/utils` · `packages/config` | Other services directly — use HTTP |
-| `ai-service` | Python stdlib + pip packages only | Node packages |
+| Package                  | Can import                                              | Cannot import                      |
+| ------------------------ | ------------------------------------------------------- | ---------------------------------- |
+| `apps/web`               | `packages/*` · service types only                       | Service runtime code directly      |
+| `apps/admin`             | `packages/*` · service types only                       | Service runtime code directly      |
+| `packages/ui`            | `packages/types` · `packages/utils`                     | `apps/*` · `services/*`            |
+| `packages/feature-flags` | `packages/types`                                        | `apps/*` · `services/*`            |
+| `packages/store`         | `packages/types` · `packages/api-client`                | `apps/*`                           |
+| `packages/api-client`    | `packages/types`                                        | `apps/*` · `services/*`            |
+| `services/*`             | `packages/types` · `packages/utils` · `packages/config` | Other services directly — use HTTP |
+| `ai-service`             | Python stdlib + pip packages only                       | Node packages                      |
 
 ---
 
@@ -85,82 +85,84 @@ These are hard rules. Never violate them.
 
 ### Frontend (`apps/web`, `apps/admin`)
 
-| Concern | Library | Notes |
-|---|---|---|
-| Framework | React 18 + TypeScript strict | Concurrent mode, StrictMode enabled |
-| Build | Vite 5 | Fast HMR, native ESM |
-| Routing | React Router v6 | Loader-based data fetching, code splitting |
-| Server state | TanStack Query v5 | Cache, deduplication, SSE support, optimistic updates |
-| Global state | Zustand 5 | Typed slices, no providers needed |
-| Forms | React Hook Form + Zod | Zero re-renders, schema-first validation |
-| Styling | Tailwind CSS v3 | JIT, design tokens, `dark:` classes ready throughout |
-| Components | `packages/ui` (shadcn/ui) | Fully owned — not an npm dependency |
-| Feature flags | `packages/feature-flags` | `useFlag()` hook — never inline boolean hacks |
-| Error tracking | Sentry browser SDK | Source maps uploaded on Vercel deploy |
-| Analytics | PostHog browser SDK | Funnels, session replay, A/B tests |
+| Concern        | Library                      | Notes                                                 |
+| -------------- | ---------------------------- | ----------------------------------------------------- |
+| Framework      | React 18 + TypeScript strict | Concurrent mode, StrictMode enabled                   |
+| Build          | Vite 5                       | Fast HMR, native ESM                                  |
+| Routing        | React Router v6              | Loader-based data fetching, code splitting            |
+| Server state   | TanStack Query v5            | Cache, deduplication, SSE support, optimistic updates |
+| Global state   | Zustand 5                    | Typed slices, no providers needed                     |
+| Forms          | React Hook Form + Zod        | Zero re-renders, schema-first validation              |
+| Styling        | Tailwind CSS v3              | JIT, design tokens, `dark:` classes ready throughout  |
+| Components     | `packages/ui` (shadcn/ui)    | Fully owned — not an npm dependency                   |
+| Feature flags  | `packages/feature-flags`     | `useFlag()` hook — never inline boolean hacks         |
+| Error tracking | Sentry browser SDK           | Source maps uploaded on CI deploy                     |
+| Analytics      | PostHog browser SDK          | Funnels, session replay, A/B tests                    |
 
 ### Image Libraries (frontend)
 
-| Library | Used on | Purpose |
-|---|---|---|
-| `react-dropzone` | img2img, any upload | Drag-drop, validation, preview URLs |
-| `browser-image-compression` | img2img upload | Compress to < 1 MB before S3 presigned upload |
-| `react-image-crop` | img2img upload | Crop before sending to AI provider |
-| `blurhash` | All image displays | Blurred placeholder while image loads |
-| `react-lazy-load-image-component` | Saved Images gallery | IntersectionObserver lazy load + blur-up |
-| `react-photo-album` | Saved Images gallery | Justified/masonry grid, optimal row layout |
-| `yet-another-react-lightbox` | Gallery, image detail | Fullscreen lightbox, keyboard nav, zoom |
-| `react-zoom-pan-pinch` | Image detail page | Smooth zoom/pan on high-res AI images |
-| `react-konva` | Inpainting (Phase 3, flagged) | Canvas mask drawing for inpainting |
+| Library                           | Used on                       | Purpose                                       |
+| --------------------------------- | ----------------------------- | --------------------------------------------- |
+| `react-dropzone`                  | img2img, any upload           | Drag-drop, validation, preview URLs           |
+| `browser-image-compression`       | img2img upload                | Compress to < 1 MB before S3 presigned upload |
+| `react-image-crop`                | img2img upload                | Crop before sending to AI provider            |
+| `blurhash`                        | All image displays            | Blurred placeholder while image loads         |
+| `react-lazy-load-image-component` | Saved Images gallery          | IntersectionObserver lazy load + blur-up      |
+| `react-photo-album`               | Saved Images gallery          | Justified/masonry grid, optimal row layout    |
+| `yet-another-react-lightbox`      | Gallery, image detail         | Fullscreen lightbox, keyboard nav, zoom       |
+| `react-zoom-pan-pinch`            | Image detail page             | Smooth zoom/pan on high-res AI images         |
+| `react-konva`                     | Inpainting (Phase 3, flagged) | Canvas mask drawing for inpainting            |
 
 ### Backend (Node.js services)
 
-| Concern | Library | Notes |
-|---|---|---|
-| Framework | Express 5 | Native async error handling |
-| Validation | Zod | All req/res schemas — shared with frontend via `packages/types` |
-| ORM | Prisma 5 | Type-safe, migrations in git, soft deletes |
-| Job queue | BullMQ + Redis | Retry, exponential backoff, dead-letter queue |
-| HTTP client | Axios | Typed, JWT interceptor, automatic retry |
-| Auth | Passport.js + jsonwebtoken | RS256 asymmetric keys, strategy registry |
-| API docs | swagger-jsdoc | OpenAPI 3.1, auto-generated, always in sync |
-| Logging | Winston | Structured JSON — see §9 |
-| Testing | Jest + Supertest + testcontainers | Unit + integration against real DB |
+| Concern     | Library                           | Notes                                                           |
+| ----------- | --------------------------------- | --------------------------------------------------------------- |
+| Framework   | Express 5                         | Native async error handling                                     |
+| Validation  | Zod                               | All req/res schemas — shared with frontend via `packages/types` |
+| ORM         | Prisma 5                          | Type-safe, migrations in git, soft deletes                      |
+| Job queue   | BullMQ + Redis                    | Retry, exponential backoff, dead-letter queue                   |
+| HTTP client | Axios                             | Typed, JWT interceptor, automatic retry                         |
+| Auth        | Passport.js + jsonwebtoken        | RS256 asymmetric keys, strategy registry                        |
+| API docs    | swagger-jsdoc                     | OpenAPI 3.1, auto-generated, always in sync                     |
+| Logging     | Winston                           | Structured JSON — see §9                                        |
+| Testing     | Jest + Supertest + testcontainers | Unit + integration against real DB                              |
 
 ### AI Service (Python/FastAPI)
 
-| Concern | Library |
-|---|---|
-| Framework | FastAPI + Uvicorn |
-| Primary AI | Stability AI SDK (SDXL) |
-| Fallback AI | OpenAI SDK (DALL-E 3) |
+| Concern            | Library                 |
+| ------------------ | ----------------------- |
+| Framework          | FastAPI + Uvicorn       |
+| Primary AI         | Stability AI SDK (SDXL) |
+| Fallback AI        | OpenAI SDK (DALL-E 3)   |
 | Secondary fallback | HuggingFace via `httpx` |
-| Image processing | Pillow |
-| Testing | pytest + httpx |
+| Image processing   | Pillow                  |
+| Testing            | pytest + httpx          |
 
 ### Infrastructure
 
-| Concern | Tool |
-|---|---|
-| Frontend hosting | Vercel (Turborepo remote cache free + included) |
-| Backend hosting | Railway (private networking, managed DBs) |
-| Database | PostgreSQL 16 — Railway managed |
-| Cache / Queue | Redis 7 — Railway managed |
-| Object storage | AWS S3 + CloudFront CDN |
-| Email | AWS SES |
-| Feature flags | LaunchDarkly (prod) / Unleash self-hosted (dev) |
-| Error tracking | Sentry (frontend + backend + Python) |
-| Uptime / synthetics | Checkly |
-| Metrics dashboards | Grafana Cloud free + Prometheus |
-| Distributed tracing | OpenTelemetry + Honeycomb free tier |
-| Log aggregation | Railway log drain → Logtail |
-| IaC | Terraform (S3 + CloudFront + SES bootstrap only) |
-| CI/CD | GitHub Actions |
-| E2E | Playwright |
-| Performance testing | k6 |
-| Security scanning | OWASP ZAP (CI, staging) + Snyk |
-| Visual regression | Chromatic |
-| Contract testing | Pact.io |
+| Concern             | Tool                                                                     |
+| ------------------- | ------------------------------------------------------------------------ |
+| Frontend hosting    | S3 + CloudFront (SPA static hosting)                                     |
+| Backend hosting     | ECS Fargate (containerized microservices, private VPC)                   |
+| Container registry  | ECR (one repository per service)                                         |
+| Database            | RDS PostgreSQL 16 (Multi-AZ)                                             |
+| Cache / Queue       | ElastiCache Redis 7                                                      |
+| Load balancer       | Application Load Balancer (public HTTPS to api-gateway only)             |
+| Object storage      | AWS S3 + CloudFront CDN                                                  |
+| Email               | AWS SES                                                                  |
+| Feature flags       | LaunchDarkly (prod) / Unleash self-hosted (dev)                          |
+| Error tracking      | Sentry (frontend + backend + Python)                                     |
+| Uptime / synthetics | Checkly                                                                  |
+| Metrics dashboards  | Grafana Cloud free + Prometheus                                          |
+| Distributed tracing | OpenTelemetry + Honeycomb free tier                                      |
+| Log aggregation     | CloudWatch Logs → Logtail                                                |
+| IaC                 | Terraform (full infra — VPC, ECS, RDS, ElastiCache, ALB, S3, CloudFront) |
+| CI/CD               | GitHub Actions                                                           |
+| E2E                 | Playwright                                                               |
+| Performance testing | k6                                                                       |
+| Security scanning   | OWASP ZAP (CI, staging) + Snyk                                           |
+| Visual regression   | Chromatic                                                                |
+| Contract testing    | Pact.io                                                                  |
 
 ---
 
@@ -170,13 +172,13 @@ Feature flags are a **first-class architectural concern**. Every user-facing fea
 
 ### 5.1 Provider Setup
 
-| Environment | Provider | Update latency |
-|---|---|---|
-| Production | LaunchDarkly (SDK key from Railway secrets) | < 1s streaming |
-| Staging | LaunchDarkly (staging environment) | < 1s streaming |
-| Development | Unleash (Docker Compose container) | < 1s |
-| CI / tests | `flags.test.json` (static file) | Immediate — no network |
-| Fallback | `flags.default.json` (bundled in `packages/feature-flags`) | On deploy |
+| Environment | Provider                                                   | Update latency         |
+| ----------- | ---------------------------------------------------------- | ---------------------- |
+| Production  | LaunchDarkly (SDK key from Secrets Manager)                | < 1s streaming         |
+| Staging     | LaunchDarkly (staging environment)                         | < 1s streaming         |
+| Development | Unleash (Docker Compose container)                         | < 1s                   |
+| CI / tests  | `flags.test.json` (static file)                            | Immediate — no network |
+| Fallback    | `flags.default.json` (bundled in `packages/feature-flags`) | On deploy              |
 
 Fallback behaviour: core generation features ON, all billing/payments OFF, admin OFF.
 
@@ -198,25 +200,25 @@ Examples:
 
 **Keep this table up to date.** Every new flag must be added here before code is written.
 
-| Flag key | Type | v1 default | Phase | Description |
-|---|---|---|---|---|
-| `image.text_generation.enabled` | boolean | **ON** | 1 — Stable | Core text-to-image generation |
-| `image.img2img.enabled` | boolean | **ON** | 1 — Stable | Image-to-image generation |
-| `image.batch_generation.enabled` | boolean | OFF | 2 | Generate multiple images per request |
-| `image.upscaling.enabled` | boolean | OFF | 2 | AI 4x super-resolution upscaling |
-| `image.inpainting.enabled` | boolean | OFF | 3 | Edit image regions with canvas mask |
-| `image.video_generation.enabled` | boolean | OFF | 4 | Text/image to video generation |
-| `ai.model_selector.enabled` | boolean | OFF | 2 | User chooses AI model from registry |
-| `ai.style_presets.enabled` | boolean | OFF | 2 | One-click style preset buttons |
-| `ai.safety_check.enabled` | boolean | OFF | 3 | Enable NSFW safety middleware in FastAPI |
-| `ui.dark_mode.enabled` | boolean | OFF | 2 | Dark theme toggle in settings |
-| `ui.new_dashboard.enabled` | string | `control` | 2 | A/B test — `control` or `variant_a` |
-| `payments.stripe.enabled` | boolean | OFF | 2 | Stripe subscription checkout flow |
-| `payments.credits.enabled` | boolean | OFF | 3 | Pay-per-generation credit system |
-| `user.social_profiles.enabled` | boolean | OFF | 3 | Public gallery + profile page |
-| `user.teams.enabled` | boolean | OFF | 3 | Team workspaces + shared collections |
-| `user.api_access.enabled` | boolean | OFF | 3 | Developer API key management |
-| `admin.dashboard.enabled` | boolean | OFF | 2 | Admin app — restricted to admin role |
+| Flag key                         | Type    | v1 default | Phase      | Description                              |
+| -------------------------------- | ------- | ---------- | ---------- | ---------------------------------------- |
+| `image.text_generation.enabled`  | boolean | **ON**     | 1 — Stable | Core text-to-image generation            |
+| `image.img2img.enabled`          | boolean | **ON**     | 1 — Stable | Image-to-image generation                |
+| `image.batch_generation.enabled` | boolean | OFF        | 2          | Generate multiple images per request     |
+| `image.upscaling.enabled`        | boolean | OFF        | 2          | AI 4x super-resolution upscaling         |
+| `image.inpainting.enabled`       | boolean | OFF        | 3          | Edit image regions with canvas mask      |
+| `image.video_generation.enabled` | boolean | OFF        | 4          | Text/image to video generation           |
+| `ai.model_selector.enabled`      | boolean | OFF        | 2          | User chooses AI model from registry      |
+| `ai.style_presets.enabled`       | boolean | OFF        | 2          | One-click style preset buttons           |
+| `ai.safety_check.enabled`        | boolean | OFF        | 3          | Enable NSFW safety middleware in FastAPI |
+| `ui.dark_mode.enabled`           | boolean | OFF        | 2          | Dark theme toggle in settings            |
+| `ui.new_dashboard.enabled`       | string  | `control`  | 2          | A/B test — `control` or `variant_a`      |
+| `payments.stripe.enabled`        | boolean | OFF        | 2          | Stripe subscription checkout flow        |
+| `payments.credits.enabled`       | boolean | OFF        | 3          | Pay-per-generation credit system         |
+| `user.social_profiles.enabled`   | boolean | OFF        | 3          | Public gallery + profile page            |
+| `user.teams.enabled`             | boolean | OFF        | 3          | Team workspaces + shared collections     |
+| `user.api_access.enabled`        | boolean | OFF        | 3          | Developer API key management             |
+| `admin.dashboard.enabled`        | boolean | OFF        | 2          | Admin app — restricted to admin role     |
 
 ### 5.4 Using Flags — Frontend
 
@@ -230,16 +232,18 @@ const isImg2ImgEnabled = useFlag('image.img2img.enabled');
 const { 'ui.dark_mode.enabled': darkMode } = useFlags(['ui.dark_mode.enabled']);
 
 // Guard a section
-{isImg2ImgEnabled && <GenerateByImageTab />}
+{
+  isImg2ImgEnabled && <GenerateByImageTab />;
+}
 
 // Guard a whole route
 <ProtectedRoute flag="image.img2img.enabled">
   <GenerateByImagePage />
-</ProtectedRoute>
+</ProtectedRoute>;
 
 // ❌ NEVER do this
 const isEnabled = process.env.VITE_SHOW_IMG2IMG === 'true'; // wrong
-const BATCH_ENABLED = false;                                 // wrong
+const BATCH_ENABLED = false; // wrong
 ```
 
 ### 5.5 Using Flags — Backend
@@ -248,11 +252,11 @@ const BATCH_ENABLED = false;                                 // wrong
 // api-gateway/middleware/featureFlag.ts
 import { flagClient } from '@ai-platform/feature-flags/server';
 
-export const requireFlag = (flagKey: string) =>
-  async (req: Request, res: Response, next: NextFunction) => {
+export const requireFlag =
+  (flagKey: string) => async (req: Request, res: Response, next: NextFunction) => {
     const enabled = await flagClient.isEnabled(flagKey, {
       userId: req.user?.id,
-      tier:   req.user?.tier,
+      tier: req.user?.tier,
     });
     if (!enabled) {
       return res.status(403).json({
@@ -326,26 +330,26 @@ Follow this for every new user-facing feature without exception:
 
 These columns exist in v1 schema for future features. They are nullable and unused in v1:
 
-| Table | Reserved columns | Unlocked by |
-|---|---|---|
-| `users` | `credits`, `teamId`, `isPublic`, `apiKeyHash` | Phase 2–3 flags |
-| `images` | `stylePreset`, `seed`, `width`, `height`, `collectionId` | Phase 2 flags |
-| `generation_jobs` | `batchId`, `parentJobId` | `image.batch_generation.enabled` |
-| `teams` | entire table (exists in schema, empty) | `user.teams.enabled` |
-| `api_keys` | entire table (exists in schema, empty) | `user.api_access.enabled` |
+| Table             | Reserved columns                                         | Unlocked by                      |
+| ----------------- | -------------------------------------------------------- | -------------------------------- |
+| `users`           | `credits`, `teamId`, `isPublic`, `apiKeyHash`            | Phase 2–3 flags                  |
+| `images`          | `stylePreset`, `seed`, `width`, `height`, `collectionId` | Phase 2 flags                    |
+| `generation_jobs` | `batchId`, `parentJobId`                                 | `image.batch_generation.enabled` |
+| `teams`           | entire table (exists in schema, empty)                   | `user.teams.enabled`             |
+| `api_keys`        | entire table (exists in schema, empty)                   | `user.api_access.enabled`        |
 
 ### 7.3 Redis Key Patterns
 
 Always use these exact patterns. Don't invent new ones without adding them here:
 
-| Pattern | TTL | Purpose |
-|---|---|---|
-| `revoked:{jti}` | Access token remaining TTL | Revoked access token blacklist |
-| `ratelimit:{userId}:{route}` | 1 hour | Sliding window rate limit counter |
-| `quota:{userId}` | 1 hour | Cached quota — avoids DB hit per request |
-| `job:status:{jobId}` | 2 hours | Live job status for SSE polling |
-| `session:{userId}` | 15 min | Session presence cache |
-| `flag:cache:{userId}` | 5 min | Evaluated flag cache per user |
+| Pattern                      | TTL                        | Purpose                                  |
+| ---------------------------- | -------------------------- | ---------------------------------------- |
+| `revoked:{jti}`              | Access token remaining TTL | Revoked access token blacklist           |
+| `ratelimit:{userId}:{route}` | 1 hour                     | Sliding window rate limit counter        |
+| `quota:{userId}`             | 1 hour                     | Cached quota — avoids DB hit per request |
+| `job:status:{jobId}`         | 2 hours                    | Live job status for SSE polling          |
+| `session:{userId}`           | 15 min                     | Session presence cache                   |
+| `flag:cache:{userId}`        | 5 min                      | Evaluated flag cache per user            |
 
 ---
 
@@ -401,7 +405,7 @@ Cursor-based for all list endpoints:
 
 ### 8.4 Service-to-Service Communication
 
-- Use Railway private hostnames: `http://auth-service.railway.internal:3001`
+- Use ECS Service Connect DNS: `http://auth-service.internal:3001` (private VPC, never public internet)
 - Never call another service's database directly
 - Never expose internal hostnames in API responses to clients
 - All inter-service calls use `packages/api-client` with service-to-service auth header
@@ -418,19 +422,19 @@ Use `logger` from `packages/utils/src/logger.ts` everywhere. `console.log` is ba
 import { logger } from '@ai-platform/utils';
 
 logger.info('Image generation completed', {
-  userId:     job.userId,
-  jobId:      job.id,
-  provider:   job.provider,
+  userId: job.userId,
+  jobId: job.id,
+  provider: job.provider,
   durationMs: Date.now() - job.startedAt,
-  model:      job.model,
+  model: job.model,
 });
 
 logger.error('AI provider call failed', {
-  userId:   job.userId,
-  jobId:    job.id,
+  userId: job.userId,
+  jobId: job.id,
   provider: job.provider,
-  error:    err.message,    // message only — never the full error object
-  attempt:  attempt,
+  error: err.message, // message only — never the full error object
+  attempt: attempt,
 });
 ```
 
@@ -458,13 +462,13 @@ Use `track()` from `packages/utils/src/analytics.ts`. Every user action must fir
 import { track } from '@ai-platform/utils/analytics';
 
 track('generation_completed', {
-  userId:       user.id,
-  jobId:        job.id,
-  provider:     'stability-ai',
-  model:        'sdxl',
-  durationMs:   12400,
+  userId: user.id,
+  jobId: job.id,
+  provider: 'stability-ai',
+  model: 'sdxl',
+  durationMs: 12400,
   promptLength: prompt.length,
-  success:      true,
+  success: true,
 });
 ```
 
@@ -472,15 +476,15 @@ All event schemas are typed in `packages/types/src/analytics.types.ts`. Add new 
 
 ### Event Taxonomy
 
-| Category | Events |
-|---|---|
-| Acquisition | `page_view` · `signup_started` · `signup_completed` · `oauth_clicked` |
-| Engagement | `login` · `session_start` · `feature_used` · `prompt_submitted` |
-| Generation | `generation_started` · `generation_completed` · `generation_failed` |
-| Content | `image_saved` · `image_deleted` · `collection_created` · `image_shared` |
-| Conversion | `upgrade_clicked` · `plan_selected` · `payment_completed` |
-| Errors | `api_error` · `quota_exceeded` · `safety_rejected` · `upload_failed` |
-| Flags / A/B | `flag_evaluated` · `experiment_exposure` · `variant_assigned` |
+| Category    | Events                                                                  |
+| ----------- | ----------------------------------------------------------------------- |
+| Acquisition | `page_view` · `signup_started` · `signup_completed` · `oauth_clicked`   |
+| Engagement  | `login` · `session_start` · `feature_used` · `prompt_submitted`         |
+| Generation  | `generation_started` · `generation_completed` · `generation_failed`     |
+| Content     | `image_saved` · `image_deleted` · `collection_created` · `image_shared` |
+| Conversion  | `upgrade_clicked` · `plan_selected` · `payment_completed`               |
+| Errors      | `api_error` · `quota_exceeded` · `safety_rejected` · `upload_failed`    |
+| Flags / A/B | `flag_evaluated` · `experiment_exposure` · `variant_assigned`           |
 
 ---
 
@@ -533,9 +537,12 @@ throw new AppError('QUOTA_EXCEEDED', 'Monthly limit reached', 429, { limit, used
 
 // ✅ Express routes — use asyncHandler wrapper
 import { asyncHandler } from '../middleware/asyncHandler';
-router.post('/generate', asyncHandler(async (req, res) => {
-  // thrown errors auto-forwarded to error middleware
-}));
+router.post(
+  '/generate',
+  asyncHandler(async (req, res) => {
+    // thrown errors auto-forwarded to error middleware
+  })
+);
 
 // ✅ Frontend — TanStack Query + Sentry
 const { mutate } = useMutation({
@@ -547,8 +554,8 @@ const { mutate } = useMutation({
 });
 
 // ❌ Never
-throw new Error('something went wrong');   // no code, untyped
-console.error(err);                        // not structured, not tracked
+throw new Error('something went wrong'); // no code, untyped
+console.error(err); // not structured, not tracked
 ```
 
 ### 11.5 Feature Flag Discipline
@@ -611,16 +618,16 @@ Stability AI → OpenAI DALL-E 3 → HuggingFace → raise `ProviderUnavailableE
 
 ## 13. Testing Requirements
 
-| Level | Tool | Min coverage | Run command |
-|---|---|---|---|
-| Unit — frontend | Vitest + Testing Library | 85% per package | `pnpm test:unit --filter=web` |
-| Unit — backend | Jest | 85% per service | `pnpm test:unit --filter=auth-service` |
-| Integration | Jest + Supertest + testcontainers | 70% per service | `pnpm test:integration` |
-| Contract | Pact.io | All service boundaries | `pnpm test:contract` |
-| E2E | Playwright | All 8 critical flows | `pnpm test:e2e` |
-| Performance | k6 | Key endpoints | `pnpm test:perf` |
-| Security (DAST) | OWASP ZAP | Zero high findings | CI only (staging) |
-| Visual regression | Chromatic | All `packages/ui` components | CI on PR |
+| Level             | Tool                              | Min coverage                 | Run command                            |
+| ----------------- | --------------------------------- | ---------------------------- | -------------------------------------- |
+| Unit — frontend   | Vitest + Testing Library          | 85% per package              | `pnpm test:unit --filter=web`          |
+| Unit — backend    | Jest                              | 85% per service              | `pnpm test:unit --filter=auth-service` |
+| Integration       | Jest + Supertest + testcontainers | 70% per service              | `pnpm test:integration`                |
+| Contract          | Pact.io                           | All service boundaries       | `pnpm test:contract`                   |
+| E2E               | Playwright                        | All 8 critical flows         | `pnpm test:e2e`                        |
+| Performance       | k6                                | Key endpoints                | `pnpm test:perf`                       |
+| Security (DAST)   | OWASP ZAP                         | Zero high findings           | CI only (staging)                      |
+| Visual regression | Chromatic                         | All `packages/ui` components | CI on PR                               |
 
 ### CI Gates — PRs Blocked If:
 
@@ -648,14 +655,16 @@ Stability AI → OpenAI DALL-E 3 → HuggingFace → raise `ProviderUnavailableE
 ## 14. Environment Variables
 
 ### All Services
+
 ```bash
 NODE_ENV=development|staging|production
 LOG_LEVEL=debug|info|warn|error
 SERVICE_NAME=auth-service
-RAILWAY_ENVIRONMENT=dev|staging|production
+AWS_ENVIRONMENT=dev|staging|production
 ```
 
 ### Auth Service
+
 ```bash
 JWT_PRIVATE_KEY=          # RS256 PEM private key
 JWT_PUBLIC_KEY=           # RS256 PEM public key
@@ -669,6 +678,7 @@ REDIS_URL=
 ```
 
 ### Image Service
+
 ```bash
 DATABASE_URL=
 REDIS_URL=
@@ -678,10 +688,11 @@ AWS_REGION=us-east-1
 AWS_BUCKET_GENERATED=prod-ai-images-generated
 AWS_BUCKET_UPLOADS=prod-ai-images-uploads
 CLOUDFRONT_DOMAIN=https://cdn.yourdomain.com
-AI_SERVICE_URL=http://ai-service.railway.internal:8000
+AI_SERVICE_URL=http://ai-service.internal:8000
 ```
 
 ### AI Service (FastAPI)
+
 ```bash
 STABILITY_API_KEY=
 OPENAI_API_KEY=
@@ -693,15 +704,16 @@ AWS_BUCKET_GENERATED=
 ```
 
 ### Feature Flags
+
 ```bash
 LAUNCHDARKLY_SDK_KEY=           # Server-side SDK key — all Node.js services
-VITE_LAUNCHDARKLY_CLIENT_KEY=   # Client-side key — Vercel frontend
+VITE_LAUNCHDARKLY_CLIENT_KEY=   # Client-side key — frontend (CloudFront)
 UNLEASH_URL=                    # Dev self-hosted Unleash
 UNLEASH_CLIENT_SECRET=
 FEATURE_FLAGS_PROVIDER=launchdarkly|unleash|static
 ```
 
-> **Rule:** Never commit real values. Every service has `.env.example`. Real secrets live in Railway Environment Variables (prod/staging) or `.env.local` (local dev, gitignored).
+> **Rule:** Never commit real values. Every service has `.env.example`. Real secrets live in AWS Secrets Manager + SSM Parameter Store (prod/staging) or `.env.local` (local dev, gitignored).
 
 ---
 
@@ -712,62 +724,75 @@ FEATURE_FLAGS_PROVIDER=launchdarkly|unleash|static
 pnpm install
 
 # Local dev
-docker-compose up                             # Full stack (DB, Redis, all services)
-pnpm dev --filter=web                         # Frontend only
-pnpm dev --filter=auth-service                # Single backend service
+docker-compose up                                   # Full stack (DB, Redis, all services)
+pnpm dev --filter=@ai-platform/web                  # Frontend only
+pnpm dev --filter=@ai-platform/auth-service         # Single backend service
 
 # Tests
-pnpm test                                     # All tests
-pnpm turbo test --filter=...affected          # Affected packages only
-pnpm test:e2e                                 # Playwright full suite
-pnpm test:e2e --project=chromium              # Single browser
+pnpm test                                           # All tests
+pnpm turbo test --filter=...affected                # Affected packages only
+pnpm test:e2e                                       # Playwright full suite
+pnpm test:e2e --project=chromium                    # Single browser
 
-# Database (run from services/<name>)
-pnpm prisma migrate dev --name description    # Create new migration
-pnpm prisma migrate deploy                    # Apply in staging/prod
-pnpm prisma studio                            # Visual editor
+# Database (run from services/auth-service — owns the Prisma schema)
+pnpm prisma migrate dev --name description          # Create new migration
+pnpm prisma migrate deploy                          # Apply in staging/prod
+pnpm prisma studio                                  # Visual editor
 
 # Code quality
-pnpm typecheck                                # TypeScript across all packages
-pnpm lint                                     # ESLint across all packages
-pnpm lint --fix                               # Auto-fix safe issues
+pnpm typecheck                                      # TypeScript across all packages
+pnpm lint                                           # ESLint across all packages
+pnpm lint --fix                                     # Auto-fix safe issues
 
 # Build
-pnpm build                                    # All packages (Turborepo cached)
-pnpm turbo build --filter=web                 # Single app
+pnpm build                                          # All packages (Turborepo cached)
+pnpm turbo build --filter=@ai-platform/web          # Single app
 
 # After any OpenAPI spec change
 pnpm run generate:api-client
 
-# Railway
-railway up --service auth-service             # Manual deploy
-railway logs --service auth-service           # Tail logs
+# Docker (build a service image locally — monorepo root as context)
+docker build -f services/auth-service/Dockerfile -t auth-service:local .
+docker run --rm -p 3001:3001 auth-service:local
 
-# Vercel
-vercel --prod                                 # Manual production deploy
+# AWS / ECS (manual deploy — CI does this automatically)
+aws ecs update-service --cluster visioncraft-production --service auth-service --force-new-deployment
+aws logs tail /ecs/visioncraft/auth-service --follow
+
+# Frontend (manual deploy to S3 — CI does this automatically)
+pnpm turbo build --filter=@ai-platform/web
+aws s3 sync apps/web/dist/ s3://visioncraft-frontend-production/ --delete
+aws cloudfront create-invalidation --distribution-id $CF_DIST_ID --paths "/index.html"
+
+# Terraform
+cd infra/terraform/environments/qa && terraform plan
+cd infra/terraform/environments/qa && terraform apply
 ```
 
 ---
 
 ## 16. Deployment Quick Reference
 
-### Vercel (Frontend)
-- Push to `main` → automatic deploy to production
-- Every PR → automatic preview URL (Turborepo remote cache used automatically)
-- Build command: `pnpm turbo build --filter=web`
-- Env vars: set in Vercel dashboard per environment
+### S3 + CloudFront (Frontend)
 
-### Railway (Backend)
-- Push to `main` → Railway auto-deploys each service
-- Watch paths configured — service only redeploys when its own files change
-- Internal URLs: `http://<service-name>.railway.internal:<port>` — use for all inter-service calls
-- External: only `api-gateway` is publicly exposed
-- Env vars: set in Railway dashboard per service per environment
+- Push to `main` → GitHub Actions builds `apps/web` → syncs to S3 → CloudFront invalidation
+- Every PR → preview URL at `https://preview.visioncraft.io/pr-{number}/`
+- Build command: `pnpm turbo build --filter=@ai-platform/web`
+- Env vars: SSM Parameter Store (`VITE_*` values injected at build time in CI)
+
+### ECS Fargate (Backend)
+
+- Push to `main` → GitHub Actions builds Docker images → pushes to ECR → ECS rolling deploy
+- All 8 services (6 Node.js + image-worker + ai-service) deploy in parallel via matrix job
+- Internal URLs: `http://<service-name>.internal:<port>` via ECS Service Connect — use for all inter-service calls
+- External: only `api-gateway` is publicly exposed via ALB
+- Env vars: SSM Parameter Store (non-sensitive) + Secrets Manager (sensitive) — injected at container start
 
 ### Promoting to Production
+
 ```
-1. Merge to main  →  auto-deploys to staging
-2. Playwright E2E runs against staging  →  must pass (CI gate)
+1. Merge to main  →  auto-deploys to QA (ECS + S3)
+2. Playwright E2E runs against QA  →  must pass (CI gate)
 3. Manual workflow_dispatch in GitHub Actions  →  promote to production
 4. Automated smoke tests run post-deploy
 5. Monitor Sentry + Grafana for 15 minutes  →  declare healthy
@@ -777,17 +802,17 @@ vercel --prod                                 # Manual production deploy
 
 ## 17. Architecture Decision Log
 
-| ADR | Decision | Status |
-|---|---|---|
-| ADR-0001 | Turborepo over Nx — simpler config, Vercel-native remote cache | Accepted |
-| ADR-0002 | TanStack Query for server state — not Redux RTK Query | Accepted |
-| ADR-0003 | FastAPI for AI service — Python ML ecosystem required | Accepted |
-| ADR-0004 | LaunchDarkly (prod) + Unleash (dev) for feature flags | Accepted |
-| ADR-0005 | BullMQ over AWS SQS — Railway-native, no extra AWS dependency | Accepted |
-| ADR-0006 | Prisma with soft deletes — never hard-delete user content | Accepted |
-| ADR-0007 | RS256 JWT with refresh token rotation + family revocation | Accepted |
-| ADR-0008 | Railway + Vercel over Kubernetes — zero-ops, faster iteration | Accepted |
-| ADR-0009 | Safety middleware as pass-through slot in v1, enable in Phase 3 | Accepted |
+| ADR      | Decision                                                                        | Status   |
+| -------- | ------------------------------------------------------------------------------- | -------- |
+| ADR-0001 | Turborepo over Nx — simpler config, remote cache compatible                     | Accepted |
+| ADR-0002 | TanStack Query for server state — not Redux RTK Query                           | Accepted |
+| ADR-0003 | FastAPI for AI service — Python ML ecosystem required                           | Accepted |
+| ADR-0004 | LaunchDarkly (prod) + Unleash (dev) for feature flags                           | Accepted |
+| ADR-0005 | BullMQ over AWS SQS — simpler ops, Redis already required                       | Accepted |
+| ADR-0006 | Prisma with soft deletes — never hard-delete user content                       | Accepted |
+| ADR-0007 | RS256 JWT with refresh token rotation + family revocation                       | Accepted |
+| ADR-0008 | ECS Fargate + S3/CloudFront over Kubernetes — managed infra, lower ops overhead | Accepted |
+| ADR-0009 | Safety middleware as pass-through slot in v1, enable in Phase 3                 | Accepted |
 
 Full ADR files with context and consequences are in `/docs/adr/`.
 
@@ -798,7 +823,7 @@ Full ADR files with context and consequences are in `/docs/adr/`.
 - **Never** call AI providers (Stability AI, OpenAI) directly from frontend — always via backend API
 - **Always** check resource ownership before returning or mutating: `if (image.userId !== req.user.id) throw forbidden`
 - **Always** sanitize and truncate prompts before passing to AI providers
-- **Never** expose internal Railway hostnames, DB URLs, or Redis URLs in API responses
+- **Never** expose internal service hostnames, DB URLs, or Redis URLs in API responses
 - **Never** store tokens, passwords, or secrets in `localStorage` or any client-accessible storage
 - All SQL goes through Prisma — no raw `$queryRaw` without team review and an explaining comment
 - Run `pnpm audit` before merging any PR touching `package.json`
@@ -806,5 +831,5 @@ Full ADR files with context and consequences are in `/docs/adr/`.
 
 ---
 
-*Last updated: 2025 · Maintained by: Platform Team*
-*HLD reference: `/docs/HLD_v3_FINAL.docx` · Questions: `#architecture` Slack channel*
+_Last updated: 2025 · Maintained by: Platform Team_
+_HLD reference: `/docs/HLD_v3_FINAL.docx` · Questions: `#architecture` Slack channel_

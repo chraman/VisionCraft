@@ -1,5 +1,6 @@
 # Implementation Plan — AI Image Creation Platform
-> **Stack:** React (Vercel) · Node.js Microservices (Railway) · FastAPI (Railway) · Turborepo · PostgreSQL · Redis · S3  
+
+> **Stack:** React (S3 + CloudFront) · Node.js Microservices (ECS Fargate) · FastAPI (ECS Fargate) · Turborepo · PostgreSQL · Redis · S3
 > **Duration:** 12 weeks · 8 sprints  
 > **Last updated:** 2025 · Companion to HLD v3.0
 
@@ -27,14 +28,16 @@ Every task must satisfy all of these before it is considered complete:
 - [ ] OpenAPI spec updated — if API contract changed
 - [ ] Zero TypeScript errors, zero ESLint violations
 - [ ] `CLAUDE.md` updated — if new flag, env var, or convention added
-- [ ] Railway / Vercel env vars documented in `.env.example`
+- [ ] AWS SSM / Secrets Manager env vars documented in `.env.example`
 
 ---
 
 ## Sprint 0 — Foundation & Tooling
+
 **Weeks 1–2 · Goal: Green CI, runnable local stack, complete schema with all reserved columns**
 
 ### Monorepo & Tooling
+
 - [ ] Init Nx workspace → migrate to Turborepo (`turbo.json` with build/test/lint/typecheck tasks)
 - [ ] Configure pnpm workspaces — `pnpm-workspace.yaml` listing all apps, packages, services
 - [ ] TypeScript `tsconfig.base.json` — strict mode, path aliases (`@ai-platform/*`)
@@ -43,6 +46,7 @@ Every task must satisfy all of these before it is considered complete:
 - [ ] commitlint — enforce Conventional Commits (`feat:` `fix:` `chore:` `docs:` `test:`)
 
 ### Shared Packages — Scaffold
+
 - [ ] `packages/types` — DTOs: `User`, `Image`, `GenerationJob`, `APIResponse<T>`, `AppError`, `FeatureFlags`
 - [ ] `packages/utils` — Winston logger (structured JSON), `track()` analytics stub, formatters
 - [ ] `packages/config` — Zod env schemas per service, shared constants (`API_ROUTES`, `TIERS`)
@@ -52,6 +56,7 @@ Every task must satisfy all of these before it is considered complete:
 - [ ] `packages/ui` — shadcn/ui base install, `Button`, `Input`, `Card`, `Badge`, `Spinner` components
 
 ### Database
+
 - [ ] Prisma schema — ALL tables with reserved columns (see HLD §7.1)
   - `users` — include: `credits`, `team_id`, `is_public`, `metadata JSONB`, `deleted_at`
   - `images` — include: `style_preset`, `seed`, `width`, `height`, `collection_id`, `metadata JSONB`
@@ -62,32 +67,42 @@ Every task must satisfy all of these before it is considered complete:
 - [ ] Seed script — 3 test users (free / pro / admin tiers), 5 sample images
 
 ### Infrastructure
+
 - [ ] Docker Compose — PostgreSQL 16, Redis 7, all Node services (stub `200 /health`), FastAPI (stub)
-- [ ] Railway projects created — one per service, linked to GitHub repo, watch paths configured
-- [ ] Vercel projects created — `apps/web` and `apps/admin`, build commands set
+- [ ] `Dockerfile` per service — Node.js monorepo pattern (`pnpm deploy` isolation); Python ai-service separate
+- [ ] Terraform modules — VPC, ECR (8 repos), ECS cluster, RDS PostgreSQL 16, ElastiCache Redis 7, ALB, IAM roles
+- [ ] S3 + CloudFront — frontend hosting (`visioncraft-frontend-{env}` bucket, SPA routing rules)
+- [ ] SSM Parameter Store + Secrets Manager — populate all service env vars per environment
 - [ ] GitHub Actions CI pipeline — `lint → typecheck → test → build` (all green on empty project)
+- [ ] GitHub Actions deploy pipeline — `docker build → ECR push → ECS rolling deploy` (matrix, all 8 services parallel)
 - [ ] Dependabot config — weekly PRs for npm + Python deps
 - [ ] gitleaks — secret scanning on every push
 
 ### Documentation
+
 - [ ] `CLAUDE.md` — full initial version committed to repo root
 - [ ] ADR-0001 through ADR-0007 written in `/docs/adr/`
 - [ ] `README.md` — full local setup guide (clone → pnpm install → docker-compose up → working)
 - [ ] All feature flags created in LaunchDarkly dev environment (default OFF, core ON)
 
 ### Sprint 0 Acceptance Criteria
+
 - `docker-compose up` starts all services with no errors
 - `pnpm test` runs and passes on empty project
 - CI pipeline is green on every push
 - `pnpm prisma migrate dev` runs with no errors
 - All 17 feature flags exist in LaunchDarkly dev environment
+- All 8 Dockerfiles build successfully; `GET /health` responds in each container
+- `terraform plan` shows zero errors for QA environment
 
 ---
 
 ## Sprint 1 — Auth Service
+
 **Week 3 · Goal: Secure, production-ready authentication with Google OAuth and JWT rotation**
 
 ### Auth Service — API
+
 - [ ] Express 5 app skeleton — health check, error handler, request ID middleware
 - [ ] `POST /api/v1/auth/register` — Zod validation, bcrypt(12), email uniqueness, 201 + token
 - [ ] `POST /api/v1/auth/login` — verify creds, issue RS256 access token (15 min) + refresh token (7 days)
@@ -103,13 +118,15 @@ Every task must satisfy all of these before it is considered complete:
 - [ ] Audit log — write to `audit_log` table on: login, logout, failed attempt, OAuth, 2FA
 
 ### API Gateway — Auth Middleware
+
 - [ ] `validateJWT` middleware — verify RS256 signature, check Redis blacklist, attach `req.user`
 - [ ] `requireFlag` middleware — evaluate flag per route, return 403 if disabled
 - [ ] `requireRole` middleware — RBAC check (user / admin)
 - [ ] Helmet.js — CSP, HSTS, X-Frame-Options, X-Content-Type-Options
-- [ ] CORS — whitelist Vercel domain + localhost in dev
+- [ ] CORS — whitelist CloudFront domain + localhost in dev (`ALLOWED_ORIGINS` env var)
 
 ### Testing — Sprint 1
+
 - [ ] Unit: JWT issue/verify/rotate, bcrypt helper, token family logic, lockout timer
 - [ ] Integration: full register → login → refresh → logout cycle (testcontainers PostgreSQL + Redis)
 - [ ] Security: token reuse detection → family revocation, rate limit enforcement, lockout behaviour
@@ -118,9 +135,11 @@ Every task must satisfy all of these before it is considered complete:
 ---
 
 ## Sprint 2 — User Service + Frontend Auth
+
 **Week 4 · Goal: Complete auth UI, user profiles, quota engine**
 
 ### User Service — API
+
 - [ ] `GET  /api/v1/users/me` — return authenticated user profile
 - [ ] `PATCH /api/v1/users/me` — update name, avatar URL
 - [ ] `GET  /api/v1/users/me/quota` — return `{ used, limit, resetAt, tier }`
@@ -128,12 +147,14 @@ Every task must satisfy all of these before it is considered complete:
 - [ ] Monthly quota reset — BullMQ cron job at midnight 1st of month
 
 ### Notification Service — Email
+
 - [ ] AWS SES integration — verify sender domain
 - [ ] `POST /api/v1/notify/email` — internal endpoint, send via SES
 - [ ] Welcome email — triggered on register
 - [ ] Email verification — token link, `POST /api/v1/auth/verify-email`
 
 ### Frontend — Auth UI
+
 - [ ] React Router setup — public routes, `<ProtectedRoute>` HOC, redirect logic
 - [ ] `packages/store` — `authSlice`: `user`, `isAuthenticated`, `login()`, `logout()`, `setUser()`
 - [ ] `packages/api-client` — JWT interceptor: attach access token, auto-refresh on 401
@@ -145,6 +166,7 @@ Every task must satisfy all of these before it is considered complete:
 - [ ] `useQuota()` hook — TanStack Query wrapper for quota endpoint
 
 ### Testing — Sprint 2
+
 - [ ] Unit: quota engine logic, authSlice actions, form validation schemas
 - [ ] Integration: register → email verify → login → quota check cycle
 - [ ] E2E: full signup flow, Google OAuth flow (mocked), protected route redirect
@@ -152,9 +174,11 @@ Every task must satisfy all of these before it is considered complete:
 ---
 
 ## Sprint 3 — Image Service + Job Queue + S3
+
 **Week 5 · Goal: Async image generation job system end-to-end (AI mocked)**
 
 ### Image Service — API
+
 - [ ] `POST /api/v1/images/generate` — validate JWT + quota + flag → create job → enqueue → 202 + `{ jobId }`
 - [ ] `GET  /api/v1/images/jobs/:id` — poll job status: `{ status, imageUrl?, error? }`
 - [ ] `GET  /api/v1/images` — list user images, paginated (cursor-based), soft-delete filtered
@@ -166,6 +190,7 @@ Every task must satisfy all of these before it is considered complete:
 - [ ] `GET  /api/v1/images/upload-url` — return S3 presigned upload URL for img2img
 
 ### Image Worker
+
 - [ ] BullMQ worker setup — connect to Redis, consume `image-generation` queue
 - [ ] Job processor: `PENDING → PROCESSING → call AI service → upload S3 → COMPLETED | FAILED`
 - [ ] S3 upload — multipart for large files, tag with `userId` + `jobId`, return CloudFront URL
@@ -173,15 +198,18 @@ Every task must satisfy all of these before it is considered complete:
 - [ ] Job timeout: 60s max — mark FAILED if AI service doesn't respond
 
 ### S3 + CloudFront Setup
+
 - [ ] Terraform: S3 buckets (`generated`, `uploads`), CloudFront distribution, OAI policy
 - [ ] Image naming: `{userId}/{YYYY}/{MM}/{jobId}.webp`
 - [ ] Lifecycle rules: Standard → IA (30 days), Glacier (90 days) for free-tier users
 
 ### Feature Flag Guards
+
 - [ ] `POST /generate` guarded by `requireFlag('image.text_generation.enabled')`
 - [ ] Separate `POST /generate/image` endpoint guarded by `requireFlag('image.img2img.enabled')`
 
 ### Testing — Sprint 3
+
 - [ ] Unit: job state machine, S3 URL generation, retry logic, quota decrement
 - [ ] Integration: full job lifecycle with mocked AI service and testcontainers
 - [ ] Flag test: flag OFF → POST /generate returns 403 FEATURE_DISABLED
@@ -190,10 +218,12 @@ Every task must satisfy all of these before it is considered complete:
 ---
 
 ## Sprint 4 — FastAPI AI Service
+
 **Week 6 · Goal: AI service with provider abstraction, safety slot, and model registry**
 
 ### FastAPI Service
-- [ ] FastAPI app skeleton — Uvicorn, CORS (Railway private network only), structured logging
+
+- [ ] FastAPI app skeleton — Uvicorn, CORS (VPC private network only), structured logging
 - [ ] `POST /generate/text` — accept `{ prompt, model, aspectRatio, quality }`, run safety slot, call provider
 - [ ] `POST /generate/image` — accept `{ imageUrl, prompt, strength, model }`, img2img generation
 - [ ] `GET  /models` — list model registry (filtered by `ai.model_selector.enabled` flag)
@@ -201,6 +231,7 @@ Every task must satisfy all of these before it is considered complete:
 - [ ] `GET  /metrics` — Prometheus metrics: `generation_total`, `generation_duration_seconds`, `generation_errors_total`
 
 ### Provider Implementation
+
 - [ ] `ProviderRegistry` class — route to correct provider by model name
 - [ ] `StabilityAIProvider` — SDXL primary, async HTTP calls, error handling
 - [ ] `OpenAIProvider` — DALL-E 3 fallback
@@ -209,6 +240,7 @@ Every task must satisfy all of these before it is considered complete:
 - [ ] Provider failover: Stability → OpenAI → HuggingFace → raise error
 
 ### Safety Middleware Slot
+
 - [ ] `ai-service/middleware/safety.py` — `async def safety_check(prompt, image_bytes) -> SafetyResult`
 - [ ] v1 implementation: always returns `SafetyResult(passed=True, score=0.0)` (pass-through)
 - [ ] `SAFETY_ENABLED` env var — when `false`, skip slot entirely
@@ -216,6 +248,7 @@ Every task must satisfy all of these before it is considered complete:
 - [ ] Document clearly: "Replace this function to enable safety checking"
 
 ### Testing — Sprint 4
+
 - [ ] pytest: provider routing logic, safety slot pass-through, model registry filtering
 - [ ] Integration: mock Stability AI → full pipeline → S3 upload → job COMPLETED
 - [ ] Fallback test: Stability AI returns 429 → falls through to OpenAI
@@ -224,9 +257,11 @@ Every task must satisfy all of these before it is considered complete:
 ---
 
 ## Sprint 5 — Frontend Generation UI + Real-time Updates
+
 **Week 7 · Goal: Complete generate-by-text and generate-by-image UI with SSE status**
 
 ### Generate by Text Page
+
 - [ ] Prompt textarea — character counter, placeholder examples, Zod validation (min 3 chars)
 - [ ] Model info display — shows current model name (hidden until `ai.model_selector.enabled` ON)
 - [ ] Aspect ratio selector — 1:1, 16:9, 9:16, 4:3 (maps to width/height in request)
@@ -238,6 +273,7 @@ Every task must satisfy all of these before it is considered complete:
 - [ ] Error state — clear message, retry button, quota exceeded → upgrade CTA
 
 ### Generate by Image Page
+
 - [ ] Drag-drop zone (`react-dropzone`) — accept PNG/JPEG/WEBP, max 10 MB, preview thumbnail
 - [ ] Client-side compression (`browser-image-compression`) — target < 1 MB before upload
 - [ ] Crop UI (`react-image-crop`) — optional crop before sending
@@ -248,6 +284,7 @@ Every task must satisfy all of these before it is considered complete:
 - [ ] Entire page hidden when `image.img2img.enabled` flag is OFF
 
 ### Saved Images Page
+
 - [ ] `useImages()` hook — TanStack Query, cursor pagination, `invalidateQueries` on save/delete
 - [ ] `react-photo-album` — justified grid layout, responsive columns
 - [ ] `react-lazy-load-image-component` — lazy load with blurhash blur-up transition
@@ -258,18 +295,21 @@ Every task must satisfy all of these before it is considered complete:
 - [ ] Empty state — illustrated empty state with "Generate your first image" CTA
 
 ### Image Detail Page
+
 - [ ] `react-zoom-pan-pinch` — smooth zoom/pan, double-tap to zoom on mobile
 - [ ] Metadata panel — prompt, model, dimensions, seed, generation time, date
 - [ ] Actions — download (full res), save to collection, share link (copy URL), delete
 - [ ] Related generations — same prompt, different seeds (future placeholder shown)
 
 ### Dashboard
+
 - [ ] Recent images grid — last 8 images, `react-photo-album` masonry
 - [ ] Quota bar — `used / limit` progress bar, colour: green < 70%, amber < 90%, red ≥ 90%
 - [ ] Quick action card — "Generate new image" → routes to /generate/text
 - [ ] Stats row — total generated, saved, collections
 
 ### Testing — Sprint 5
+
 - [ ] Unit: `useJobStatus` SSE hook, `useImages` pagination, upload compression helper
 - [ ] E2E (Playwright): full text generation flow, img2img flow, save image, gallery lightbox
 - [ ] Flag test: img2img tab hidden when flag OFF, tab visible when flag ON
@@ -277,9 +317,11 @@ Every task must satisfy all of these before it is considered complete:
 ---
 
 ## Sprint 6 — Security Hardening + Observability
+
 **Weeks 8–9 · Goal: OWASP clean, full observability stack wired**
 
 ### Security
+
 - [ ] OWASP ZAP baseline scan on staging — zero high findings target
 - [ ] Helmet.js audit — confirm all headers present on every service
 - [ ] Input sanitisation audit — every user input passes Zod schema before processing
@@ -292,32 +334,39 @@ Every task must satisfy all of these before it is considered complete:
 - [ ] gitleaks — no secrets in git history scan
 
 ### Observability — Sentry
-- [ ] Sentry browser SDK in `apps/web` — source maps uploaded on Vercel deploy
+
+- [ ] Sentry browser SDK in `apps/web` — source maps uploaded on CI deploy
 - [ ] Sentry Node SDK in all services — unhandled rejection capture, request breadcrumbs
 - [ ] Sentry Python SDK in `ai-service`
 - [ ] Performance tracing — sample 20% of requests, trace from api-gateway through service
 - [ ] Alert rules: error rate > 1% → Slack notification
 
 ### Observability — Logging
-- [ ] Railway log drain → Logtail (or Papertrail) — all services streaming
+
+- [ ] CloudWatch Logs → Logtail (Kinesis Firehose subscription or direct integration) — all services streaming
+- [ ] CloudWatch Container Insights enabled on ECS cluster
 - [ ] Logtail alert: `level:error` count > 10/min → Slack webhook
 - [ ] Confirm: no PII in logs (automated log scan in CI — grep for email pattern)
 
 ### Observability — Metrics
+
 - [ ] Prometheus scrape endpoints on all services (`/metrics`)
-- [ ] Grafana Cloud free tier — connect to Railway services via Prometheus remote write
+- [ ] Grafana Cloud free tier — connect to ECS services via Prometheus remote write
 - [ ] Dashboard: API P95 latency, generation success rate, queue depth, active jobs
 - [ ] Alert: P99 > 2s → PagerDuty; generation failure rate > 5% → Slack
 
 ### Observability — Tracing
+
 - [ ] OpenTelemetry SDK in all Node services — trace context propagation via `X-Trace-Id` header
 - [ ] Honeycomb free tier — visualise traces across api-gateway → service → worker → AI
 
 ### Uptime Monitoring
+
 - [ ] Checkly — synthetic monitor for login flow + generate flow, runs every 5 min
 - [ ] Alert: 2 consecutive failures → PagerDuty
 
 ### Testing — Sprint 6
+
 - [ ] k6 load test: 100 concurrent users, 5-minute sustained, P95 < 200ms for API
 - [ ] OWASP ZAP scan — zero high/critical findings on staging
 - [ ] Rate limit test: 429 returned correctly at tier limits
@@ -326,21 +375,25 @@ Every task must satisfy all of these before it is considered complete:
 ---
 
 ## Sprint 7 — Analytics + Testing Completion
+
 **Week 10 · Goal: Full analytics pipeline, all 8 E2E flows green, coverage gates met**
 
 ### Analytics Service
+
 - [ ] `POST /api/v1/events` — ingest event, validate schema (Zod), write to `analytics_events` table
-- [ ] Background sync — BullMQ job syncs rows to ClickHouse (Railway service) every 5 min
+- [ ] Background sync — BullMQ job syncs rows to ClickHouse every 5 min
 - [ ] `packages/utils/analytics.ts` — `track(event, properties)` called consistently across frontend + backend
 - [ ] All events wired per taxonomy (see HLD §11)
-- [ ] PostHog self-hosted on Railway — receive events, funnel analysis, session replay configured
+- [ ] PostHog (cloud or self-hosted on ECS) — receive events, funnel analysis, session replay configured
 
 ### A/B Testing
+
 - [ ] `ui.new_dashboard.enabled` flag — two variants wired to PostHog experiment
 - [ ] Dashboard page renders `control` or `variant_a` layout based on flag evaluation
 - [ ] `flag_evaluated` + `experiment_exposure` events fired on page load
 
 ### Testing Completion
+
 - [ ] Pact.io contract tests — api-gateway ↔ auth-service, image-service ↔ ai-service
 - [ ] Chromatic visual regression — all `packages/ui` components snapshotted
 - [ ] Coverage gates enforced in CI — builds fail below 85% unit / 70% integration
@@ -348,6 +401,7 @@ Every task must satisfy all of these before it is considered complete:
 - [ ] k6 performance test — 200 concurrent users, 10 min sustained, P95 < 200ms
 
 ### Testing — Sprint 7
+
 - [ ] Pact contract tests green — both boundaries
 - [ ] Analytics: assert events fire correctly in E2E tests (PostHog test API)
 - [ ] A/B test: assert both variants render without errors
@@ -355,48 +409,55 @@ Every task must satisfy all of these before it is considered complete:
 ---
 
 ## Sprint 8 — Production Deploy + Launch Readiness
+
 **Weeks 11–12 · Goal: Production live, monitored, canary-deployed, runbook complete**
 
-### Railway Production
-- [ ] Create Railway production environment — all services, production env vars set
-- [ ] Private networking verified — all internal service calls use `.railway.internal` hostnames
-- [ ] Health checks configured — Railway restarts unhealthy containers automatically
-- [ ] Resource limits set per service — prevent noisy-neighbour issues
-- [ ] PostgreSQL production — Railway managed, daily backups enabled, point-in-time restore tested
-- [ ] Redis production — Railway managed, maxmemory-policy `allkeys-lru` configured
+### ECS Fargate Production
 
-### Vercel Production
-- [ ] Custom domain connected — SSL automatic via Vercel
-- [ ] Environment variables set — production API URL, LaunchDarkly client key, Sentry DSN
-- [ ] Preview deploy protection — require auth for non-production previews
+- [ ] Apply Terraform production environment — all 8 ECS services running in `visioncraft-production` cluster
+- [ ] Private networking verified — all internal service calls use ECS Service Connect DNS (`.internal`)
+- [ ] Health checks configured — ECS restarts unhealthy containers automatically
+- [ ] RDS PostgreSQL 16 production — Multi-AZ enabled, automated backups, point-in-time restore tested
+- [ ] ElastiCache Redis 7 production — `maxmemory-policy allkeys-lru` configured
+
+### S3 + CloudFront Production
+
+- [ ] Custom domain connected — ACM certificate, HTTPS enforced
+- [ ] Environment variables set — production API URL, LaunchDarkly client key, Sentry DSN (via SSM)
+- [ ] CloudFront cache invalidation verified — `index.html` invalidated on every deploy
 
 ### Deploy Pipeline
-- [ ] GitHub Actions — deploy to staging on merge to main
-- [ ] Staging E2E run — Playwright against staging, block production if fails
-- [ ] Manual promote step — GitHub Actions `workflow_dispatch` to promote staging → production
+
+- [ ] GitHub Actions — deploy to QA on merge to main (ECS + S3)
+- [ ] QA E2E run — Playwright against QA, block production if fails
+- [ ] Manual promote step — GitHub Actions `workflow_dispatch` to promote QA → production
 - [ ] Smoke tests post-deploy — automated: health checks + login + generate + save
-- [ ] Rollback plan — Railway instant rollback to previous deploy (one click)
+- [ ] Rollback plan — ECS roll back to previous task definition revision via `aws ecs update-service`
 
 ### LaunchDarkly Production
+
 - [ ] Production environment created — all flags configured, defaults verified
 - [ ] Core flags ON: `image.text_generation.enabled`, `image.img2img.enabled`
 - [ ] All Phase 2+ flags OFF in production
-- [ ] SDK key stored in Railway production secrets
+- [ ] SDK key stored in AWS Secrets Manager (`visioncraft/production/shared/launchdarkly-sdk-key`)
 
 ### AWS Production
+
 - [ ] S3 production buckets created — versioning enabled, MFA delete on generated bucket
 - [ ] CloudFront production distribution — HTTPS only, HSTS headers
 - [ ] SES production — out of sandbox, sending limits appropriate for launch volume
 - [ ] IAM roles — principle of least privilege, no root credentials used
 
 ### Runbook & Operations
+
 - [ ] Runbook written: `/docs/runbook.md` — on-call guide, incident severity levels
 - [ ] Incident response playbook — P1/P2/P3 escalation paths
 - [ ] Rollback procedure documented and tested
 - [ ] Backup restore tested — restore PostgreSQL from backup to staging, verify data
-- [ ] On-call rotation set up — at least 2 people with Railway + AWS access
+- [ ] On-call rotation set up — at least 2 people with AWS console access
 
 ### Launch Checklist
+
 - [ ] All 8 E2E flows passing on production (post-deploy smoke run)
 - [ ] Zero high Sentry errors in first 30 min
 - [ ] Checkly synthetic monitors green
@@ -409,46 +470,51 @@ Every task must satisfy all of these before it is considered complete:
 ## Feature Phases — Post-Launch Roadmap
 
 ### Phase 2 — Month 2–3
-| Feature | Flag to enable | Estimated effort |
-|---|---|---|
-| Batch Image Generation | `image.batch_generation.enabled` | 3 days |
-| AI Upscaling (4x) | `image.upscaling.enabled` | 3 days |
-| AI Model Selector | `ai.model_selector.enabled` | 2 days |
-| Style Presets | `ai.style_presets.enabled` | 2 days |
-| Dark Mode | `ui.dark_mode.enabled` | 1 day |
-| Stripe Billing | `payments.stripe.enabled` | 1 week |
-| Admin Dashboard | `admin.dashboard.enabled` | 3 days |
+
+| Feature                | Flag to enable                   | Estimated effort |
+| ---------------------- | -------------------------------- | ---------------- |
+| Batch Image Generation | `image.batch_generation.enabled` | 3 days           |
+| AI Upscaling (4x)      | `image.upscaling.enabled`        | 3 days           |
+| AI Model Selector      | `ai.model_selector.enabled`      | 2 days           |
+| Style Presets          | `ai.style_presets.enabled`       | 2 days           |
+| Dark Mode              | `ui.dark_mode.enabled`           | 1 day            |
+| Stripe Billing         | `payments.stripe.enabled`        | 1 week           |
+| Admin Dashboard        | `admin.dashboard.enabled`        | 3 days           |
 
 ### Phase 3 — Month 4–6
-| Feature | Flag to enable | Notes |
-|---|---|---|
-| NSFW Safety Check | `ai.safety_check.enabled` | Implement `safety.py`, deploy NudeNet |
-| Image Inpainting | `image.inpainting.enabled` | `react-konva` mask UI + FastAPI `/inpaint` |
-| Credit System | `payments.credits.enabled` | `credits_ledger` table already in schema |
-| Public Profiles | `user.social_profiles.enabled` | `is_public` col already in `users` |
-| Team Workspaces | `user.teams.enabled` | `teams` table already exists |
-| Developer API Access | `user.api_access.enabled` | `api_keys` table already exists |
+
+| Feature              | Flag to enable                 | Notes                                      |
+| -------------------- | ------------------------------ | ------------------------------------------ |
+| NSFW Safety Check    | `ai.safety_check.enabled`      | Implement `safety.py`, deploy NudeNet      |
+| Image Inpainting     | `image.inpainting.enabled`     | `react-konva` mask UI + FastAPI `/inpaint` |
+| Credit System        | `payments.credits.enabled`     | `credits_ledger` table already in schema   |
+| Public Profiles      | `user.social_profiles.enabled` | `is_public` col already in `users`         |
+| Team Workspaces      | `user.teams.enabled`           | `teams` table already exists               |
+| Developer API Access | `user.api_access.enabled`      | `api_keys` table already exists            |
 
 ### Phase 4 — Month 7+
-| Feature | Notes |
-|---|---|
-| Text/Image to Video | New `video-service` Railway service, GPU worker |
-| Mobile App | React Native, reuses all `packages/*` |
-| Custom Model Fine-tuning | S3 model storage, training pipeline |
+
+| Feature                  | Notes                                                   |
+| ------------------------ | ------------------------------------------------------- |
+| Text/Image to Video      | New `video-service` ECS service, GPU-enabled EC2 worker |
+| Mobile App               | React Native, reuses all `packages/*`                   |
+| Custom Model Fine-tuning | S3 model storage, training pipeline                     |
 
 ---
 
 ## Environment Variables Reference
 
 ### All Services
+
 ```bash
 NODE_ENV=development|staging|production
 LOG_LEVEL=debug|info|warn|error
 SERVICE_NAME=auth-service         # Used in structured logs + traces
-RAILWAY_ENVIRONMENT=dev|staging|production
+AWS_ENVIRONMENT=dev|staging|production
 ```
 
 ### Auth Service
+
 ```bash
 JWT_PRIVATE_KEY=<RS256 PEM>
 JWT_PUBLIC_KEY=<RS256 PEM>
@@ -462,6 +528,7 @@ REDIS_URL=redis://...
 ```
 
 ### Image Service
+
 ```bash
 DATABASE_URL=postgresql://...
 REDIS_URL=redis://...
@@ -471,10 +538,11 @@ AWS_REGION=us-east-1
 AWS_BUCKET_GENERATED=prod-ai-images-generated
 AWS_BUCKET_UPLOADS=prod-ai-images-uploads
 CLOUDFRONT_DOMAIN=https://cdn.yourdomain.com
-AI_SERVICE_URL=http://ai-service.railway.internal:8000
+AI_SERVICE_URL=http://ai-service.internal:8000
 ```
 
 ### FastAPI AI Service
+
 ```bash
 STABILITY_API_KEY=
 OPENAI_API_KEY=
@@ -486,9 +554,10 @@ AWS_BUCKET_GENERATED=
 ```
 
 ### Feature Flags (All Services + Frontend)
+
 ```bash
 LAUNCHDARKLY_SDK_KEY=             # Server-side SDK key (Node.js services)
-VITE_LAUNCHDARKLY_CLIENT_KEY=     # Client-side key (Vercel frontend)
+VITE_LAUNCHDARKLY_CLIENT_KEY=     # Client-side key (CloudFront frontend)
 UNLEASH_URL=                      # Dev self-hosted fallback
 UNLEASH_CLIENT_SECRET=
 FEATURE_FLAGS_PROVIDER=launchdarkly|unleash|static
@@ -501,23 +570,23 @@ FEATURE_FLAGS_PROVIDER=launchdarkly|unleash|static
 ```bash
 # Local dev
 pnpm install
-docker-compose up                           # Start all infra (DB, Redis, services)
-pnpm dev --filter=web                       # Start frontend only
-pnpm dev --filter=auth-service              # Start one service
+docker-compose up                                     # Start all infra (DB, Redis, services)
+pnpm dev --filter=@ai-platform/web                    # Start frontend only
+pnpm dev --filter=@ai-platform/auth-service           # Start one service
 
 # Tests
-pnpm test                                   # Run all tests
-pnpm turbo test --filter=...affected        # Only affected packages
-pnpm test:e2e                               # Playwright E2E
+pnpm test                                             # Run all tests
+pnpm turbo test --filter=...affected                  # Only affected packages
+pnpm test:e2e                                         # Playwright E2E
 
-# Database
-cd services/image-service
-pnpm prisma migrate dev --name description  # New migration
-pnpm prisma studio                          # DB UI
+# Database (run from services/auth-service — owns the schema)
+cd services/auth-service
+pnpm prisma migrate dev --name description            # New migration
+pnpm prisma studio                                    # DB UI
 
 # Build
-pnpm build                                  # Build all (Turborepo cached)
-pnpm turbo build --filter=web               # Build single app
+pnpm build                                            # Build all (Turborepo cached)
+pnpm turbo build --filter=@ai-platform/web            # Build single app
 
 # Type check + lint
 pnpm typecheck
@@ -526,26 +595,31 @@ pnpm lint
 # API client regeneration (after OpenAPI spec change)
 pnpm run generate:api-client
 
-# Railway deploy (via CLI)
-railway up --service auth-service
+# Docker (build and run a service locally)
+docker build -f services/auth-service/Dockerfile -t auth-service:local .
+docker run --rm -p 3001:3001 auth-service:local
+
+# AWS / ECS (manual — CI handles automatically)
+aws ecs update-service --cluster visioncraft-production --service auth-service --force-new-deployment
+aws logs tail /ecs/visioncraft/auth-service --follow
 ```
 
 ---
 
 ## Architecture Decision Log
 
-| ADR | Decision | Status |
-|---|---|---|
-| ADR-0001 | Turborepo over Nx — simpler config, Vercel-native | Accepted |
-| ADR-0002 | TanStack Query for server state — not Redux RTK Query | Accepted |
-| ADR-0003 | FastAPI for AI service — Python ML ecosystem | Accepted |
-| ADR-0004 | LaunchDarkly + Unleash fallback for feature flags | Accepted |
-| ADR-0005 | BullMQ over SQS — Railway-native, simpler setup | Accepted |
-| ADR-0006 | Prisma with soft deletes — never hard-delete user content | Accepted |
-| ADR-0007 | RS256 JWT with refresh token rotation + family revocation | Accepted |
-| ADR-0008 | Railway + Vercel over Kubernetes — zero-ops, faster iteration | Accepted |
-| ADR-0009 | Safety middleware as pass-through slot — enable in Phase 3 | Accepted |
+| ADR      | Decision                                                                        | Status   |
+| -------- | ------------------------------------------------------------------------------- | -------- |
+| ADR-0001 | Turborepo over Nx — simpler config, remote cache compatible                     | Accepted |
+| ADR-0002 | TanStack Query for server state — not Redux RTK Query                           | Accepted |
+| ADR-0003 | FastAPI for AI service — Python ML ecosystem                                    | Accepted |
+| ADR-0004 | LaunchDarkly + Unleash fallback for feature flags                               | Accepted |
+| ADR-0005 | BullMQ over SQS — simpler ops, Redis already required                           | Accepted |
+| ADR-0006 | Prisma with soft deletes — never hard-delete user content                       | Accepted |
+| ADR-0007 | RS256 JWT with refresh token rotation + family revocation                       | Accepted |
+| ADR-0008 | ECS Fargate + S3/CloudFront over Kubernetes — managed infra, lower ops overhead | Accepted |
+| ADR-0009 | Safety middleware as pass-through slot — enable in Phase 3                      | Accepted |
 
 ---
 
-*This plan is a living document. Update sprint tasks as work progresses. Add new ADRs for non-trivial decisions. Keep CLAUDE.md in sync.*
+_This plan is a living document. Update sprint tasks as work progresses. Add new ADRs for non-trivial decisions. Keep CLAUDE.md in sync._
