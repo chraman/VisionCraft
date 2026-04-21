@@ -5,9 +5,18 @@ variable "cluster_arn"           { type = string }
 variable "service_name"          { type = string }
 variable "image_uri"             { type = string }
 variable "container_port"        { type = number }
-variable "cpu"                   { type = number  default = 256 }
-variable "memory"                { type = number  default = 512 }
-variable "desired_count"         { type = number  default = 1 }
+variable "cpu" {
+  type    = number
+  default = 256
+}
+variable "memory" {
+  type    = number
+  default = 512
+}
+variable "desired_count" {
+  type    = number
+  default = 1
+}
 variable "private_subnet_ids"    { type = list(string) }
 variable "app_sg_id"             { type = string }
 variable "execution_role_arn"    { type = string }

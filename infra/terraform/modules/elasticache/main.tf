@@ -1,7 +1,10 @@
 variable "environment"        { type = string }
 variable "private_subnet_ids"  { type = list(string) }
 variable "redis_sg_id"         { type = string }
-variable "node_type"           { type = string  default = "cache.t3.micro" }
+variable "node_type" {
+  type    = string
+  default = "cache.t3.micro"
+}
 
 resource "aws_elasticache_subnet_group" "main" {
   name       = "visioncraft-${var.environment}"
