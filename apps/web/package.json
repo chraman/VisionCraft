@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build --mode local",
-    "build:qa": "tsc -b && vite build --mode qa",
-    "build:prod": "tsc -b && vite build --mode prod",
+    "build": "vite build --mode local",
+    "build:qa": "vite build --mode qa",
+    "build:prod": "vite build --mode prod",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
