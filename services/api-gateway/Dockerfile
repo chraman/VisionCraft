@@ -11,7 +11,7 @@ FROM node:20-alpine AS deployer
 RUN corepack enable && corepack prepare pnpm@latest --activate
 WORKDIR /repo
 COPY --from=builder /repo .
-RUN pnpm deploy --filter=@ai-platform/api-gateway --prod /app
+RUN pnpm deploy --legacy --filter=@ai-platform/api-gateway --prod /app
 
 FROM node:20-alpine AS runner
 WORKDIR /app
