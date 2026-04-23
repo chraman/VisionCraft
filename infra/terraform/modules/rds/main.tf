@@ -41,7 +41,7 @@ resource "aws_db_instance" "postgres" {
   db_subnet_group_name   = aws_db_subnet_group.main.name
   vpc_security_group_ids = [var.rds_sg_id]
 
-  backup_retention_period = 7
+  backup_retention_period = var.environment == "production" ? 7 : 0
   skip_final_snapshot     = var.environment != "production"
   deletion_protection     = var.environment == "production"
 

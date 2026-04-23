@@ -33,8 +33,22 @@ resource "aws_lb_target_group" "api_gateway" {
   tags = { Name = "visioncraft-${var.environment}-api-gateway-tg" }
 }
 
-# HTTP → HTTPS redirect
-resource "aws_lb_listener" "http" {
+# HTTP-only listener — used when no certificate is provided (QA without HTTPS)
+resource "aws_lb_listener" "http_forward" {
+  count             = var.certificate_arn == "" ? 1 : 0
+  load_balancer_arn = aws_lb.main.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.api_gateway.arn
+  }
+}
+
+# HTTP → HTTPS redirect — only created when a certificate is provided
+resource "aws_lb_listener" "http_redirect" {
+  count             = var.certificate_arn != "" ? 1 : 0
   load_balancer_arn = aws_lb.main.arn
   port              = 80
   protocol          = "HTTP"
@@ -49,13 +63,14 @@ resource "aws_lb_listener" "http" {
   }
 }
 
-# HTTPS listener (uses ACM cert if provided; falls back to self-signed for QA)
+# HTTPS listener — only created when a certificate is provided
 resource "aws_lb_listener" "https" {
+  count             = var.certificate_arn != "" ? 1 : 0
   load_balancer_arn = aws_lb.main.arn
   port              = 443
   protocol          = "HTTPS"
   ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
-  certificate_arn   = var.certificate_arn != "" ? var.certificate_arn : null
+  certificate_arn   = var.certificate_arn
 
   default_action {
     type             = "forward"
