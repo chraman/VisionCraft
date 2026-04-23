@@ -1,2 +1,2 @@
-export { useAuthStore } from './authSlice.js';
-export type { AuthState, AuthActions, AuthSlice } from './authSlice.js';
+﻿export { useAuthStore } from './authSlice';
+export type { AuthState, AuthActions, AuthSlice } from './authSlice';

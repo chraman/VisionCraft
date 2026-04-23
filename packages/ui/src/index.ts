@@ -1,8 +1,8 @@
-export { Button, buttonVariants } from './components/Button.js';
-export type { ButtonProps } from './components/Button.js';
+﻿export { Button, buttonVariants } from './components/Button';
+export type { ButtonProps } from './components/Button';
 
-export { Input } from './components/Input.js';
-export type { InputProps } from './components/Input.js';
+export { Input } from './components/Input';
+export type { InputProps } from './components/Input';
 
 export {
   Card,
@@ -11,12 +11,12 @@ export {
   CardTitle,
   CardDescription,
   CardContent,
-} from './components/Card.js';
+} from './components/Card';
 
-export { Badge, badgeVariants } from './components/Badge.js';
-export type { BadgeProps } from './components/Badge.js';
+export { Badge, badgeVariants } from './components/Badge';
+export type { BadgeProps } from './components/Badge';
 
-export { Spinner } from './components/Spinner.js';
-export type { SpinnerProps } from './components/Spinner.js';
+export { Spinner } from './components/Spinner';
+export type { SpinnerProps } from './components/Spinner';
 
-export { cn } from './lib/utils.js';
+export { cn } from './lib/utils';

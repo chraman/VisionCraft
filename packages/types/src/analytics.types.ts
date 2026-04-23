@@ -1,7 +1,7 @@
-import type { UserTier } from './user.types.js';
+﻿import type { UserTier } from './user.types';
 
 /**
- * Analytics event taxonomy — keep in sync with CLAUDE.md §10.
+ * Analytics event taxonomy â€” keep in sync with CLAUDE.md Â§10.
  */
 export type AnalyticsEventName =
   // Acquisition

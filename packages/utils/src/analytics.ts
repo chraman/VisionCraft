@@ -1,10 +1,10 @@
-import type { AnalyticsEvent } from '@ai-platform/types';
-import { logger } from './logger.js';
+﻿import type { AnalyticsEvent } from '@ai-platform/types';
+import { logger } from './logger';
 
 /**
  * Track an analytics event.
  *
- * v1: Logs the event — a future sprint wires PostHog / analytics-service here.
+ * v1: Logs the event â€” a future sprint wires PostHog / analytics-service here.
  * All callers remain unchanged when the real implementation is added.
  */
 export function track(event: AnalyticsEvent): void {

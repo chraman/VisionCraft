@@ -1,4 +1,4 @@
-import { FlagClient } from './client.js';
+﻿import { FlagClient } from './client';
 
 /**
  * Server-side flagClient singleton.
@@ -10,5 +10,5 @@ import { FlagClient } from './client.js';
  */
 export const flagClient = new FlagClient();
 
-export { FlagClient } from './client.js';
-export type { FlagContext } from './types.js';
+export { FlagClient } from './client';
+export type { FlagContext } from './types';
