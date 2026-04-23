@@ -36,7 +36,7 @@ resource "aws_ssm_parameter" "config" {
   for_each = toset(local.ssm_params)
   name     = each.key
   type     = "String"
-  value    = "PLACEHOLDER — populate via aws ssm put-parameter"
+  value    = "PLACEHOLDER - populate via aws ssm put-parameter"
 
   lifecycle {
     # Never overwrite a value set outside Terraform

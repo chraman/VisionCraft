@@ -85,7 +85,7 @@ resource "aws_route_table_association" "private" {
 # Security groups
 resource "aws_security_group" "alb" {
   name        = "visioncraft-${var.environment}-alb-sg"
-  description = "ALB — allow inbound HTTPS"
+  description = "ALB - allow inbound HTTPS"
   vpc_id      = aws_vpc.main.id
 
   ingress {
@@ -112,7 +112,7 @@ resource "aws_security_group" "alb" {
 
 resource "aws_security_group" "app" {
   name        = "visioncraft-${var.environment}-app-sg"
-  description = "ECS tasks — allow inbound from ALB + intra-VPC"
+  description = "ECS tasks - allow inbound from ALB + intra-VPC"
   vpc_id      = aws_vpc.main.id
 
   ingress {
@@ -139,7 +139,7 @@ resource "aws_security_group" "app" {
 
 resource "aws_security_group" "rds" {
   name        = "visioncraft-${var.environment}-rds-sg"
-  description = "RDS — allow inbound from ECS tasks only"
+  description = "RDS - allow inbound from ECS tasks only"
   vpc_id      = aws_vpc.main.id
 
   ingress {
@@ -152,7 +152,7 @@ resource "aws_security_group" "rds" {
 
 resource "aws_security_group" "redis" {
   name        = "visioncraft-${var.environment}-redis-sg"
-  description = "ElastiCache — allow inbound from ECS tasks only"
+  description = "ElastiCache - allow inbound from ECS tasks only"
   vpc_id      = aws_vpc.main.id
 
   ingress {
