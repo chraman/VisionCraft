@@ -33,32 +33,25 @@ resource "aws_lb_target_group" "api_gateway" {
   tags = { Name = "visioncraft-${var.environment}-api-gateway-tg" }
 }
 
-# HTTP-only listener — used when no certificate is provided (QA without HTTPS)
-resource "aws_lb_listener" "http_forward" {
-  count             = var.certificate_arn == "" ? 1 : 0
+# Port-80 listener:
+#   - No cert → forward directly to api-gateway (plain HTTP for QA)
+#   - Cert provided → redirect to HTTPS (production)
+resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.main.arn
   port              = 80
   protocol          = "HTTP"
 
   default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.api_gateway.arn
-  }
-}
+    type             = var.certificate_arn != "" ? "redirect" : "forward"
+    target_group_arn = var.certificate_arn == "" ? aws_lb_target_group.api_gateway.arn : null
 
-# HTTP → HTTPS redirect — only created when a certificate is provided
-resource "aws_lb_listener" "http_redirect" {
-  count             = var.certificate_arn != "" ? 1 : 0
-  load_balancer_arn = aws_lb.main.arn
-  port              = 80
-  protocol          = "HTTP"
-
-  default_action {
-    type = "redirect"
-    redirect {
-      port        = "443"
-      protocol    = "HTTPS"
-      status_code = "HTTP_301"
+    dynamic "redirect" {
+      for_each = var.certificate_arn != "" ? [1] : []
+      content {
+        port        = "443"
+        protocol    = "HTTPS"
+        status_code = "HTTP_301"
+      }
     }
   }
 }
