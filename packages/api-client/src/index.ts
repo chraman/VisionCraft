@@ -51,10 +51,16 @@ export function createApiClient(baseURL = ''): AxiosInstance {
 }
 
 /**
- * Default singleton API client (relative URLs — works with Vite proxy and Railway).
- * Apps should call createApiClient(VITE_API_BASE_URL) for an explicit base URL.
+ * Default singleton API client.
+ * In Vite browser builds, reads VITE_API_BASE_URL injected at build time.
+ * Falls back to relative URLs (works with Vite dev proxy locally).
  */
-export const apiClient = createApiClient();
+export const apiClient = createApiClient(
+  typeof import.meta !== 'undefined'
+    ? ((import.meta as unknown as { env?: { VITE_API_BASE_URL?: string } }).env
+        ?.VITE_API_BASE_URL ?? '')
+    : ''
+);
 
 /**
  * Unwrap the standard API response envelope.
