@@ -11,11 +11,11 @@ An AI-powered image generation platform built on a React + Node.js + FastAPI sta
 
 | Layer         | Technology                                                  |
 | ------------- | ----------------------------------------------------------- |
-| Frontend      | React 18 + TypeScript · Vite · Vercel                       |
-| Backend       | Node.js microservices · Express 5 · Railway                 |
+| Frontend      | React 18 + TypeScript · Vite · S3 + CloudFront              |
+| Backend       | Node.js microservices · Express 5 · ECS Fargate             |
 | AI Service    | FastAPI (Python 3.11) · Stability AI · OpenAI · HuggingFace |
-| Database      | PostgreSQL 16 (Railway managed)                             |
-| Cache / Queue | Redis 7 + BullMQ (Railway managed)                          |
+| Database      | PostgreSQL 16 (RDS)                                         |
+| Cache / Queue | Redis 7 + BullMQ (ElastiCache)                              |
 | Storage       | AWS S3 + CloudFront CDN                                     |
 | Monorepo      | Turborepo + pnpm workspaces                                 |
 
@@ -52,13 +52,15 @@ pnpm install
 Copy `.env.example` to `.env.local` in each service directory and fill in the values.
 
 ```bash
-# Root
+# Git Bash / macOS / Linux
 cp .env.example .env.local
-
-# Each service
 cp services/auth-service/.env.example services/auth-service/.env.local
 cp services/image-service/.env.example services/image-service/.env.local
 # ... repeat for each service
+
+# Windows CMD / PowerShell (if not using Git Bash)
+copy .env.example .env.local
+copy services\auth-service\.env.example services\auth-service\.env.local
 ```
 
 At minimum, you need valid values for:
@@ -154,7 +156,7 @@ docker-compose logs -f          # Tail all logs
 ```
 ai-image-platform/
 ├── apps/
-│   ├── web/          # Main React app (Vite) → Vercel
+│   ├── web/          # Main React app (Vite) → S3 + CloudFront
 │   └── admin/        # Admin dashboard (Phase 2, flag-gated)
 ├── packages/
 │   ├── ui/           # Shared component library (shadcn/ui base)
@@ -164,10 +166,10 @@ ai-image-platform/
 │   ├── feature-flags/# Flag client + React hooks
 │   ├── utils/        # Logger, analytics, error helpers
 │   └── config/       # Zod env schemas, shared constants
-├── services/         # Node.js microservices → Railway
-├── workers/          # BullMQ job workers → Railway
-├── ai-service/       # FastAPI Python service → Railway
-├── infra/            # Terraform, Railway config, scripts
+├── services/         # Node.js microservices → ECS Fargate
+├── workers/          # BullMQ job workers → ECS Fargate
+├── ai-service/       # FastAPI Python service → ECS Fargate
+├── infra/            # Terraform modules, scripts
 ├── e2e/              # Playwright test suite
 └── docs/             # Architecture docs, ADRs
 ```

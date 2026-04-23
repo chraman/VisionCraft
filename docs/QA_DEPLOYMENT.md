@@ -72,21 +72,42 @@ git push origin qa
 
 The following tools must be installed locally for the one-time setup steps:
 
+### Windows (primary dev OS)
+
+**AWS CLI v2**
+
+```powershell
+winget install --id Amazon.AWSCLI
+# Or download the MSI: https://awscli.amazonaws.com/AWSCLIV2.msi
+```
+
+**Terraform >= 1.6**
+
+```powershell
+winget install --id Hashicorp.Terraform
+# Or download: https://releases.hashicorp.com/terraform/
+```
+
+**Docker Desktop** — https://docs.docker.com/get-docker/
+
+**Restart your terminal after installing** so the updated PATH takes effect, then configure AWS:
+
 ```bash
-# AWS CLI v2
-brew install awscli        # macOS
-# or: https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html
-
-# Terraform >= 1.6
-brew install terraform     # macOS
-# or: https://developer.hashicorp.com/terraform/install
-
-# Docker (for building images locally during setup)
-# https://docs.docker.com/get-docker/
-
-# Configure AWS credentials
 aws configure
-# AWS Access Key ID, Secret Access Key, region: us-east-1
+# AWS Access Key ID:     <your-access-key>
+# AWS Secret Access Key: <your-secret-key>
+# Default region name:   ap-south-1
+# Default output format: json
+```
+
+### macOS / Linux
+
+```bash
+brew install awscli terraform   # macOS
+# Linux: see https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html
+#        and https://developer.hashicorp.com/terraform/install
+
+aws configure   # region: ap-south-1
 ```
 
 You also need:
@@ -111,22 +132,56 @@ cd infra/terraform/environments/qa
 
 # Initialize — downloads providers, configures S3 state backend
 terraform init
+```
 
-# Review what will be created
-terraform plan
+> **Windows — Terraform TLS fix:** Terraform's Go HTTP client may fail with a TLS handshake
+> timeout against AWS endpoints on some Windows networks (error: `TLS handshake timeout` or
+> `connectex: A connection attempt failed`). Fix it by setting `GODEBUG=tlskyber=0` in your
+> terminal session before running any `terraform` command:
+>
+> **Git Bash:**
+>
+> ```bash
+> export GODEBUG=tlskyber=0
+> ```
+>
+> **PowerShell:**
+>
+> ```powershell
+> $env:GODEBUG = "tlskyber=0"
+> ```
+>
+> You only need this once per terminal session. This disables Go's experimental post-quantum
+> TLS Kyber extension which conflicts with some Windows firewall/proxy setups.
+
+```bash
+# Review what will be created (pass all required variables)
+terraform plan \
+  -var="github_org=<your-github-org>" \
+  -var="github_repo=<your-repo-name>" \
+  -var="aws_account_id=<your-12-digit-account-id>" \
+  -var="db_password=<strong-password>" \
+  -var="ses_from_email=<ses-verified-email>"
 
 # Apply — creates VPC, ECS cluster, RDS, ElastiCache, ALB, ECR repos, IAM roles,
 #          S3 frontend bucket, CloudFront distribution, Secrets Manager stubs, SSM params
-terraform apply
+terraform apply \
+  -var="github_org=<your-github-org>" \
+  -var="github_repo=<your-repo-name>" \
+  -var="aws_account_id=<your-12-digit-account-id>" \
+  -var="db_password=<strong-password>" \
+  -var="ses_from_email=<ses-verified-email>"
 ```
 
-After `terraform apply` completes, note these outputs — you will need them:
+After `terraform apply` completes (~15–20 min), save the outputs — you will need them in the next steps:
 
 ```bash
-terraform output alb_dns_name          # e.g. visioncraft-qa-alb-123456.us-east-1.elb.amazonaws.com
+terraform output alb_dns_name          # e.g. visioncraft-qa-alb-123456.ap-south-1.elb.amazonaws.com
 terraform output cloudfront_domain     # e.g. d1abc123.cloudfront.net
-terraform output ecr_registry          # e.g. 123456789.dkr.ecr.us-east-1.amazonaws.com
+terraform output ecr_registry          # e.g. 553138587052.dkr.ecr.ap-south-1.amazonaws.com
 terraform output ecs_cluster_name      # visioncraft-qa
+terraform output private_subnet_id     # subnet-xxxxxxxx
+terraform output app_security_group_id # sg-xxxxxxxx
 ```
 
 The ALB DNS name is your QA API endpoint. The CloudFront domain is your QA frontend URL.
@@ -135,32 +190,43 @@ The ALB DNS name is your QA API endpoint. The CloudFront domain is your QA front
 
 ### Step 2 — Secrets and parameters
 
-Terraform creates Secrets Manager secrets and SSM parameters as empty stubs. Populate them with real values:
+Terraform creates Secrets Manager secrets and SSM parameters as empty stubs. Populate them with real values.
+
+First, save your Terraform outputs to variables (run from `infra/terraform/environments/qa`):
+
+```bash
+ALB_DNS=$(terraform output -raw alb_dns_name)
+CF_DOMAIN=$(terraform output -raw cloudfront_domain)
+```
 
 #### Secrets Manager (sensitive values)
 
 ```bash
-# Database URL — from terraform output rds_endpoint
+# Database URL — replace RDS_ENDPOINT with value from: terraform output rds_endpoint
 aws secretsmanager put-secret-value \
   --secret-id visioncraft/qa/shared/database-url \
   --secret-string "postgresql://visioncraft:PASSWORD@RDS_ENDPOINT:5432/aiplatform"
 
-# Redis URL — from terraform output elasticache_endpoint
+# Redis URL — replace ELASTICACHE_ENDPOINT with value from: terraform output elasticache_endpoint
 aws secretsmanager put-secret-value \
   --secret-id visioncraft/qa/shared/redis-url \
   --secret-string "redis://ELASTICACHE_ENDPOINT:6379"
 
-# JWT keys (generate fresh RS256 keys)
+# JWT keys — generate fresh RS256 keys
 openssl genpkey -algorithm RSA -out private.pem -pkeyopt rsa_keygen_bits:2048
 openssl rsa -pubout -in private.pem -out public.pem
 
+# Read key files into variables first (works in Git Bash on Windows)
+JWT_PRIVATE=$(cat private.pem)
+JWT_PUBLIC=$(cat public.pem)
+
 aws secretsmanager put-secret-value \
   --secret-id visioncraft/qa/auth-service/jwt-private-key \
-  --secret-string "$(cat private.pem)"
+  --secret-string "$JWT_PRIVATE"
 
 aws secretsmanager put-secret-value \
   --secret-id visioncraft/qa/shared/jwt-public-key \
-  --secret-string "$(cat public.pem)"
+  --secret-string "$JWT_PUBLIC"
 
 # Google OAuth
 aws secretsmanager put-secret-value \
@@ -184,16 +250,16 @@ aws secretsmanager put-secret-value \
 #### SSM Parameter Store (non-sensitive config)
 
 ```bash
-# Google OAuth callback URL — uses the ALB domain from terraform output
+# Google OAuth callback URL
 aws ssm put-parameter \
   --name /visioncraft/qa/auth-service/google-callback-url \
-  --value "https://$(terraform output -raw alb_dns_name)/api/v1/auth/google/callback" \
+  --value "https://$ALB_DNS/api/v1/auth/google/callback" \
   --type String
 
-# CORS allowed origins — uses the CloudFront domain from terraform output
+# CORS allowed origins
 aws ssm put-parameter \
   --name /visioncraft/qa/api-gateway/allowed-origins \
-  --value "https://$(terraform output -raw cloudfront_domain)" \
+  --value "https://$CF_DOMAIN" \
   --type String
 
 # LaunchDarkly SDK key
@@ -207,16 +273,19 @@ aws ssm put-parameter \
 
 ### Step 3 — ECR repositories and initial images
 
-Build and push an initial image for each service so ECS can start the tasks for the first time:
+Build and push an initial image for each service so ECS can start the tasks for the first time.
+
+Run all commands from the **monorepo root** (`C:\Projects\VisionCraft`):
 
 ```bash
+# Save ECR registry URL
+ECR=$(terraform -chdir=infra/terraform/environments/qa output -raw ecr_registry)
+
 # Log in to ECR
-aws ecr get-login-password --region us-east-1 | \
-  docker login --username AWS --password-stdin $(terraform output -raw ecr_registry)
+aws ecr get-login-password --region ap-south-1 | \
+  docker login --username AWS --password-stdin "$ECR"
 
-ECR=$(terraform output -raw ecr_registry)
-
-# Build and push all 8 services (run from monorepo root)
+# Build and push all Node.js services
 for service in api-gateway auth-service user-service image-service notification-service analytics-service; do
   docker build -f services/$service/Dockerfile -t $ECR/visioncraft/$service:latest .
   docker push $ECR/visioncraft/$service:latest
@@ -231,19 +300,30 @@ docker build -f ai-service/Dockerfile -t $ECR/visioncraft/ai-service:latest ai-s
 docker push $ECR/visioncraft/ai-service:latest
 ```
 
+> **Windows note:** The `for` loop above works in Git Bash. If you're using PowerShell, use:
+>
+> ```powershell
+> $ECR = terraform -chdir infra/terraform/environments/qa output -raw ecr_registry
+> foreach ($service in @("api-gateway","auth-service","user-service","image-service","notification-service","analytics-service")) {
+>   docker build -f services/$service/Dockerfile -t "$ECR/visioncraft/${service}:latest" .
+>   docker push "$ECR/visioncraft/${service}:latest"
+> }
+> ```
+
 After pushing initial images, run the initial database migration:
 
 ```bash
-# Run prisma migrate deploy as a one-off ECS task
+# Retrieve subnet and security group from Terraform outputs
+SUBNET=$(terraform -chdir=infra/terraform/environments/qa output -raw private_subnet_id)
+SG=$(terraform -chdir=infra/terraform/environments/qa output -raw app_security_group_id)
+
 aws ecs run-task \
   --cluster visioncraft-qa \
-  --task-definition visioncraft-qa-migration \
+  --task-definition visioncraft-qa-auth-service \
   --launch-type FARGATE \
-  --network-configuration "awsvpcConfiguration={subnets=[PRIVATE_SUBNET_ID],securityGroups=[APP_SG_ID]}" \
+  --network-configuration "awsvpcConfiguration={subnets=[$SUBNET],securityGroups=[$SG],assignPublicIp=DISABLED}" \
   --overrides '{"containerOverrides":[{"name":"auth-service","command":["sh","-c","pnpm prisma migrate deploy"]}]}'
 ```
-
-The subnet ID and security group ID are in the Terraform outputs.
 
 ---
 
@@ -256,10 +336,10 @@ Add the following secrets to the `qa` environment:
 | Secret                            | Where to find it                                              |
 | --------------------------------- | ------------------------------------------------------------- |
 | `AWS_ACCOUNT_ID`                  | AWS console → top-right account menu                          |
-| `AWS_REGION`                      | `us-east-1` (or your chosen region)                           |
+| `AWS_REGION`                      | `ap-south-1`                                                  |
 | `ECR_REGISTRY`                    | `terraform output ecr_registry`                               |
 | `ECS_CLUSTER_QA`                  | `visioncraft-qa`                                              |
-| `ALB_QA_URL`                      | `https://$(terraform output alb_dns_name)`                    |
+| `ALB_QA_URL`                      | `https://<value of terraform output alb_dns_name>`            |
 | `CF_DISTRIBUTION_ID_QA`           | `terraform output cloudfront_distribution_id`                 |
 | `S3_FRONTEND_BUCKET_QA`           | `visioncraft-frontend-qa`                                     |
 | `VITE_API_URL_QA`                 | Same as `ALB_QA_URL` above                                    |
@@ -312,18 +392,23 @@ To run Playwright tests against the live QA environment without triggering a ful
 pnpm install
 pnpm exec playwright install --with-deps chromium firefox
 
+# Set the base URL first (Git Bash / macOS / Linux)
+export BASE_URL=https://<cloudfront-qa-domain>
+
 # Run all E2E tests
-BASE_URL=https://<cloudfront-qa-domain> pnpm test:e2e
+pnpm test:e2e
 
 # Run a single test file
-BASE_URL=https://<cloudfront-qa-domain> pnpm exec playwright test e2e/auth.test.ts
+pnpm exec playwright test e2e/auth.test.ts
 
 # Open interactive Playwright UI
-BASE_URL=https://<cloudfront-qa-domain> pnpm exec playwright test --ui
+pnpm exec playwright test --ui
 
 # Run on a single browser
-BASE_URL=https://<cloudfront-qa-domain> pnpm exec playwright test --project=chromium
+pnpm exec playwright test --project=chromium
 ```
+
+> **Windows PowerShell:** Use `$env:BASE_URL = "https://<cloudfront-qa-domain>"` instead of `export`.
 
 When `BASE_URL` is set, Playwright skips starting local services and runs directly against the live environment.
 
@@ -345,7 +430,7 @@ GitHub → Actions → Deploy QA → select the latest run
 **Playwright report:**
 If any E2E test fails, download the `playwright-report` artifact from the workflow summary. It includes screenshots and full traces for every failed test.
 
-**CloudWatch Logs (replaces `railway logs`):**
+**CloudWatch Logs:**
 
 ```bash
 # Tail logs for a specific service
@@ -380,12 +465,14 @@ aws ecs describe-tasks --cluster visioncraft-qa --tasks <task-arn>
 To wipe all QA data and re-seed fresh test accounts:
 
 ```bash
-# Run prisma migrate reset as a one-off ECS task
+SUBNET=$(terraform -chdir=infra/terraform/environments/qa output -raw private_subnet_id)
+SG=$(terraform -chdir=infra/terraform/environments/qa output -raw app_security_group_id)
+
 aws ecs run-task \
   --cluster visioncraft-qa \
-  --task-definition visioncraft-qa-migration \
+  --task-definition visioncraft-qa-auth-service \
   --launch-type FARGATE \
-  --network-configuration "awsvpcConfiguration={subnets=[PRIVATE_SUBNET_ID],securityGroups=[APP_SG_ID]}" \
+  --network-configuration "awsvpcConfiguration={subnets=[$SUBNET],securityGroups=[$SG],assignPublicIp=DISABLED}" \
   --overrides '{"containerOverrides":[{"name":"auth-service","command":["sh","-c","pnpm prisma migrate reset --force && cd ../../infra/scripts && pnpm seed"]}]}'
 ```
 
@@ -396,6 +483,10 @@ Alternatively, re-run just the seed (wipes existing rows and re-inserts). The se
 ---
 
 ## Troubleshooting
+
+### Terraform fails — TLS handshake timeout (Windows)
+
+See the [Terraform TLS fix](#step-1--terraform-infrastructure) note in Step 1. Run `export GODEBUG=tlskyber=0` (Git Bash) or `$env:GODEBUG = "tlskyber=0"` (PowerShell) before any `terraform` command.
 
 ### The `build-and-push` job fails — Docker build error
 
