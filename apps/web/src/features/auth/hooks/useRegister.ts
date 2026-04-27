@@ -17,7 +17,7 @@ export function useRegister() {
       setAccessToken(accessToken);
       setUser(user);
       track({ event: 'signup_completed', userId: user.id });
-      navigate('/generate');
+      navigate('/email-verify');
     },
     onError: (err) => {
       toast.error(getErrorMessage(err));

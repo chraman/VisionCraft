@@ -17,7 +17,7 @@ export function useLogin() {
       setAccessToken(accessToken);
       setUser(user);
       track({ event: 'login', userId: user.id });
-      navigate('/generate');
+      navigate('/dashboard');
     },
     onError: (err) => {
       toast.error(getErrorMessage(err));

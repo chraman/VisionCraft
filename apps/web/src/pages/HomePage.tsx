@@ -1,48 +1,214 @@
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '@ai-platform/store';
 
-// ─── Header ────────────────────────────────────────────────────────────────────
+// ─── Logo ─────────────────────────────────────────────────────────────────────
 
-function Header() {
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-
+function VCLogo({ size = 22 }: { size?: number }) {
   return (
-    <header className="sticky top-0 z-50 border-b border-gray-200 bg-white/90 backdrop-blur-sm">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-        <Link to="/" className="flex items-center gap-2">
-          <span className="text-2xl font-bold text-indigo-600">VisionCraft</span>
-        </Link>
+    <span className="flex items-center gap-2 text-foreground">
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <rect
+          x="2.5"
+          y="2.5"
+          width="19"
+          height="19"
+          rx="5"
+          stroke="currentColor"
+          strokeWidth="1.8"
+        />
+        <circle cx="12" cy="12" r="4.2" fill="hsl(var(--primary))" />
+        <circle cx="17" cy="7" r="1.4" fill="currentColor" />
+      </svg>
+      <span
+        className="font-display font-semibold tracking-[-0.4px]"
+        style={{ fontSize: size * 0.78 }}
+      >
+        VisionCraft
+      </span>
+    </span>
+  );
+}
 
-        <nav className="hidden gap-8 md:flex">
-          <a href="#features" className="text-sm text-gray-600 hover:text-gray-900">
+// ─── Icon strip for feature cards ─────────────────────────────────────────────
+
+const featureIcons: Record<string, React.ReactNode> = {
+  sparkle: (
+    <svg
+      width={18}
+      height={18}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.7}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" />
+      <path d="M19 15v3M17.5 16.5h3" />
+    </svg>
+  ),
+  image: (
+    <svg
+      width={18}
+      height={18}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.7}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <circle cx="9" cy="10" r="2" />
+      <path d="M21 16l-5-5-10 10" />
+    </svg>
+  ),
+  layers: (
+    <svg
+      width={18}
+      height={18}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.7}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 3l10 5-10 5L2 8l10-5z" />
+      <path d="M2 13l10 5 10-5M2 18l10 5 10-5" />
+    </svg>
+  ),
+  bolt: (
+    <svg
+      width={18}
+      height={18}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.7}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M13 2L4 14h7l-1 8 9-12h-7z" />
+    </svg>
+  ),
+  gallery: (
+    <svg
+      width={18}
+      height={18}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.7}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="3" y="3" width="8" height="8" rx="1.5" />
+      <rect x="13" y="3" width="8" height="8" rx="1.5" />
+      <rect x="3" y="13" width="8" height="8" rx="1.5" />
+      <rect x="13" y="13" width="8" height="8" rx="1.5" />
+    </svg>
+  ),
+  shield: (
+    <svg
+      width={18}
+      height={18}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.7}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z" />
+    </svg>
+  ),
+  check: (
+    <svg
+      width={15}
+      height={15}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.7}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M4 12l5 5L20 6" />
+    </svg>
+  ),
+};
+
+// Striped gradient placeholder
+function GradientTile({ seed, style }: { seed: number; style?: React.CSSProperties }) {
+  const hues: Array<[string, string]> = [
+    ['239 70% 92%', '239 84% 67%'],
+    ['262 70% 92%', '262 83% 65%'],
+    ['178 60% 92%', '178 78% 45%'],
+    ['25 80% 92%', '18 80% 55%'],
+    ['330 70% 92%', '330 75% 58%'],
+    ['142 55% 92%', '142 65% 38%'],
+    ['210 60% 94%', '210 75% 50%'],
+  ];
+  const [from, to] = hues[seed % hues.length]!;
+  return (
+    <div
+      style={{
+        background: `linear-gradient(135deg, hsl(${from}) 0%, hsl(${to}) 100%)`,
+        ...style,
+      }}
+      className="relative overflow-hidden rounded-[10px]"
+    >
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            'repeating-linear-gradient(135deg, rgba(255,255,255,.05) 0 2px, transparent 2px 16px)',
+        }}
+      />
+    </div>
+  );
+}
+
+// ─── Sections ─────────────────────────────────────────────────────────────────
+
+function Navbar({ isAuthenticated }: { isAuthenticated: boolean }) {
+  return (
+    <header className="sticky top-0 z-10 border-b border-border bg-background/90 backdrop-blur-[12px]">
+      <div className="mx-auto flex max-w-[1200px] items-center justify-between px-10 py-[18px]">
+        <VCLogo size={22} />
+        <nav className="flex gap-7 text-[13.5px] text-muted-foreground">
+          <a href="#features" className="hover:text-foreground transition-colors">
             Features
           </a>
-          <a href="#how-it-works" className="text-sm text-gray-600 hover:text-gray-900">
-            How it works
-          </a>
-          <a href="#pricing" className="text-sm text-gray-600 hover:text-gray-900">
+          <a href="#pricing" className="hover:text-foreground transition-colors">
             Pricing
           </a>
+          <Link to="/gallery" className="hover:text-foreground transition-colors">
+            Gallery
+          </Link>
         </nav>
-
-        <div className="flex items-center gap-3">
+        <div className="flex gap-2">
           {isAuthenticated ? (
             <Link
-              to="/generate"
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+              to="/dashboard"
+              className="rounded-lg bg-foreground px-4 py-2 text-[13px] font-medium text-background transition-opacity hover:opacity-90"
             >
               Go to app
             </Link>
           ) : (
             <>
-              <Link to="/login" className="text-sm font-medium text-gray-700 hover:text-gray-900">
+              <Link
+                to="/login"
+                className="rounded-lg px-4 py-2 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
                 Sign in
               </Link>
               <Link
                 to="/register"
-                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                className="rounded-lg bg-foreground px-4 py-2 text-[13px] font-medium text-background transition-opacity hover:opacity-90"
               >
-                Get started free
+                Get started
               </Link>
             </>
           )}
@@ -52,277 +218,263 @@ function Header() {
   );
 }
 
-// ─── Hero ───────────────────────────────────────────────────────────────────────
-
-function Hero() {
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-
+function Hero({ isAuthenticated }: { isAuthenticated: boolean }) {
   return (
-    <section className="relative overflow-hidden bg-gradient-to-b from-indigo-50 to-white py-24 md:py-36">
-      {/* Background decoration */}
+    <section className="relative overflow-hidden px-10 pb-[50px] pt-[90px] text-center">
+      {/* Radial glow */}
       <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-30"
-      >
-        <div className="h-[600px] w-[600px] rounded-full bg-indigo-200 blur-3xl" />
-      </div>
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background: 'radial-gradient(ellipse at top, hsl(var(--vc-soft)) 0%, transparent 60%)',
+        }}
+      />
 
-      <div className="relative mx-auto max-w-4xl px-6 text-center">
-        <span className="inline-block rounded-full bg-indigo-100 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-indigo-700">
-          Powered by Stable Diffusion XL &amp; DALL·E 3
+      <div className="relative mx-auto max-w-[920px]">
+        {/* Badge */}
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-soft px-3 py-[5px] text-[11px] font-medium text-primary">
+          {featureIcons.sparkle} New · SDXL Turbo available
         </span>
 
-        <h1 className="mt-6 text-5xl font-extrabold leading-tight tracking-tight text-gray-900 md:text-6xl">
-          Turn your words into
-          <span className="text-indigo-600"> stunning images</span>
+        {/* Headline */}
+        <h1
+          className="mt-[22px] mb-5 font-display font-medium tracking-[-2.2px] leading-[1.02]"
+          style={{ fontSize: 76 }}
+        >
+          Imagination, <em className="not-italic text-primary">rendered</em>.
         </h1>
 
-        <p className="mx-auto mt-6 max-w-2xl text-lg text-gray-600">
-          VisionCraft lets you generate, transform, and save AI-created images in seconds. Type a
-          prompt, upload a photo, or mix both — the results speak for themselves.
+        <p className="mx-auto max-w-[560px] text-[18px] leading-relaxed text-muted-foreground">
+          A calm, fast workspace for turning prompts and reference images into finished work.
         </p>
 
-        <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
+        <div className="mt-[30px] flex justify-center gap-2.5">
           <Link
             to={isAuthenticated ? '/generate' : '/register'}
-            className="rounded-xl bg-indigo-600 px-8 py-3.5 text-base font-semibold text-white shadow-lg hover:bg-indigo-700"
+            className="rounded-xl bg-primary px-[28px] py-[14px] text-[15px] font-medium text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
           >
-            {isAuthenticated ? 'Go to app' : 'Start creating for free'}
+            Start creating — it's free
           </Link>
           <a
-            href="#how-it-works"
-            className="rounded-xl border border-gray-300 px-8 py-3.5 text-base font-semibold text-gray-700 hover:bg-gray-50"
+            href="#features"
+            className="rounded-xl border border-border bg-card px-[28px] py-[14px] text-[15px] font-medium text-foreground shadow-sm transition-colors hover:bg-muted"
           >
-            See how it works
+            Watch 60-sec tour
           </a>
         </div>
 
-        <p className="mt-4 text-xs text-gray-500">
-          No credit card required · 10 free generations/month
+        <p className="mt-[18px] text-[12px] text-muted-foreground">
+          10 free generations / month · No credit card
         </p>
+      </div>
+
+      {/* App preview window */}
+      <div
+        className="mx-auto mt-[60px] max-w-[1080px] overflow-hidden rounded-2xl border border-border bg-card"
+        style={{ boxShadow: '0 30px 80px -20px rgba(40,30,80,.18)' }}
+      >
+        {/* Window chrome */}
+        <div className="flex items-center gap-2 border-b border-border px-3.5 py-2.5">
+          {['#ff5f57', '#febc2e', '#28c840'].map((c) => (
+            <div key={c} className="h-[11px] w-[11px] rounded-full" style={{ background: c }} />
+          ))}
+          <div className="flex-1 text-center font-mono text-[11.5px] text-muted-foreground">
+            app.visioncraft.io/generate
+          </div>
+        </div>
+
+        <div className="grid min-h-[380px]" style={{ gridTemplateColumns: '320px 1fr' }}>
+          {/* Left controls */}
+          <div className="border-r border-border p-5">
+            <div className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.5px] text-muted-foreground">
+              Prompt
+            </div>
+            <div className="min-h-[90px] rounded-lg border border-border bg-muted p-3.5 text-left text-[13px] leading-relaxed">
+              A ceramic teapot on a marble shelf, early morning light, 35mm
+            </div>
+            <div className="mt-4 grid grid-cols-4 gap-2">
+              {['1:1', '16:9', '9:16', '4:3'].map((r, i) => (
+                <button
+                  key={r}
+                  className={`rounded-lg border py-1.5 text-[12px] font-medium transition-colors ${
+                    i === 0
+                      ? 'border-primary bg-soft text-primary'
+                      : 'border-border bg-card text-muted-foreground hover:bg-muted'
+                  }`}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+            <button className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary py-2.5 text-[13.5px] font-medium text-primary-foreground">
+              {featureIcons.sparkle} Generate
+            </button>
+          </div>
+
+          {/* Right image grid */}
+          <div className="grid grid-cols-2 gap-3.5 p-5">
+            {[2, 5, 1, 3].map((s) => (
+              <GradientTile key={s} seed={s} style={{ aspectRatio: '1/1' }} />
+            ))}
+          </div>
+        </div>
       </div>
     </section>
   );
 }
 
-// ─── Features ──────────────────────────────────────────────────────────────────
-
-const features = [
-  {
-    icon: '✦',
-    title: 'Text to Image',
-    description:
-      'Describe anything in plain English and watch it come to life. Supports aspect ratios, styles, and HD quality.',
-  },
-  {
-    icon: '⇄',
-    title: 'Image to Image',
-    description:
-      'Upload a photo and transform it with a prompt. Control how strongly the AI reimagines your original.',
-  },
-  {
-    icon: '◈',
-    title: 'Multi-model',
-    description:
-      'Choose between Stable Diffusion XL, DALL·E 3, and more. Automatic failover keeps generation always available.',
-  },
-  {
-    icon: '⊟',
-    title: 'Saved Gallery',
-    description:
-      'Every image you love is saved to your personal gallery. Browse, download, or delete at any time.',
-  },
-  {
-    icon: '⚡',
-    title: 'Real-time progress',
-    description:
-      'Server-sent events stream job status live — no page refresh needed to see your image appear.',
-  },
-  {
-    icon: '⛨',
-    title: 'Secure &amp; private',
-    description:
-      'RS256 JWT auth, httpOnly refresh cookies, and per-user quota enforcement keep your account safe.',
-  },
-];
-
 function Features() {
+  const features = [
+    {
+      icon: 'sparkle',
+      t: 'Text to image',
+      d: 'Write a prompt, pick an aspect ratio, ship a hero in seconds.',
+    },
+    {
+      icon: 'image',
+      t: 'Image to image',
+      d: 'Upload a reference, tune strength, reimagine with a prompt.',
+    },
+    {
+      icon: 'layers',
+      t: 'Model registry',
+      d: 'SDXL, DALL·E 3, HuggingFace. One API, automatic failover.',
+    },
+    { icon: 'bolt', t: 'Live progress', d: 'Real-time SSE updates stream straight to the canvas.' },
+    {
+      icon: 'gallery',
+      t: 'Personal gallery',
+      d: 'Every save ends up in a fast, justified, lazy-loaded grid.',
+    },
+    {
+      icon: 'shield',
+      t: 'Secure by default',
+      d: 'RS256 JWT, httpOnly refresh, per-user quotas, audit log.',
+    },
+  ];
+
   return (
-    <section id="features" className="bg-white py-24">
-      <div className="mx-auto max-w-6xl px-6">
-        <div className="text-center">
-          <h2 className="text-3xl font-bold text-gray-900 md:text-4xl">
-            Everything you need to create
+    <section id="features" className="px-10 py-20">
+      <div className="mx-auto max-w-[1200px]">
+        <div className="grid grid-cols-3 gap-6">
+          {features.map((f) => (
+            <div key={f.t}>
+              <div className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-soft text-primary">
+                {featureIcons[f.icon]}
+              </div>
+              <div className="mt-3 text-[15px] font-semibold">{f.t}</div>
+              <div className="mt-1 text-[13px] leading-[1.55] text-muted-foreground">{f.d}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Pricing() {
+  const plans = [
+    {
+      name: 'Free',
+      price: '$0',
+      sub: 'forever',
+      features: ['10 generations / mo', 'Standard quality', '1:1 & 16:9', 'Personal gallery'],
+      cta: 'Get started',
+      highlight: false,
+    },
+    {
+      name: 'Pro',
+      price: '$12',
+      sub: 'per month',
+      features: [
+        '200 generations / mo',
+        'HD quality',
+        'All aspect ratios',
+        'Priority queue',
+        'Model selector',
+      ],
+      cta: 'Start 14-day trial',
+      highlight: true,
+    },
+    {
+      name: 'Studio',
+      price: 'Custom',
+      sub: 'contact us',
+      features: ['2000+ generations', 'Dedicated capacity', 'API access', 'Team workspaces', 'SLA'],
+      cta: 'Talk to sales',
+      highlight: false,
+    },
+  ];
+
+  return (
+    <section id="pricing" className="px-10 py-[60px] pb-[100px]">
+      <div className="mx-auto max-w-[1200px]">
+        <div className="mb-10 text-center">
+          <h2 className="font-display text-[42px] font-medium tracking-[-1.2px]">
+            Priced for practitioners.
           </h2>
-          <p className="mt-4 text-gray-600">
-            A complete AI image platform, built for speed and reliability.
+          <p className="mt-2 text-muted-foreground">
+            Start free. Upgrade when the work starts paying.
           </p>
         </div>
 
-        <div className="mt-16 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-          {features.map((f) => (
+        <div className="grid grid-cols-3 gap-[18px]">
+          {plans.map((p) => (
             <div
-              key={f.title}
-              className="rounded-2xl border border-gray-100 bg-gray-50 p-6 hover:border-indigo-200 hover:bg-indigo-50 transition-colors"
+              key={p.name}
+              className="rounded-xl border p-7"
+              style={
+                p.highlight
+                  ? {
+                      background: 'hsl(var(--foreground))',
+                      color: 'hsl(var(--background))',
+                      borderColor: 'hsl(var(--foreground))',
+                    }
+                  : { background: 'hsl(var(--card))', borderColor: 'hsl(var(--border))' }
+              }
             >
-              <span className="text-2xl text-indigo-500">{f.icon}</span>
-              <h3 className="mt-3 text-lg font-semibold text-gray-900">{f.title}</h3>
-              <p
-                className="mt-2 text-sm leading-relaxed text-gray-600"
-                dangerouslySetInnerHTML={{ __html: f.description }}
+              <div
+                className="text-[12px] font-semibold uppercase tracking-[0.8px]"
+                style={{ color: p.highlight ? 'rgba(255,255,255,.75)' : 'hsl(var(--primary))' }}
+              >
+                {p.name}
+              </div>
+              <div className="mt-2 font-display text-[44px] font-medium leading-none tracking-[-1.5px]">
+                {p.price}
+              </div>
+              <div className="text-[12.5px] opacity-70">{p.sub}</div>
+              <div
+                className="my-[18px] h-px"
+                style={{ background: p.highlight ? 'rgba(255,255,255,.12)' : 'hsl(var(--border))' }}
               />
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ─── How it works ───────────────────────────────────────────────────────────────
-
-const steps = [
-  {
-    step: '01',
-    title: 'Create an account',
-    body: 'Sign up free in seconds — email or Google OAuth.',
-  },
-  {
-    step: '02',
-    title: 'Write a prompt',
-    body: 'Describe your image, pick aspect ratio and quality.',
-  },
-  {
-    step: '03',
-    title: 'Generate',
-    body: 'Our AI pipeline runs your job and streams progress back live.',
-  },
-  { step: '04', title: 'Save & share', body: 'Keep your favourites in your personal gallery.' },
-];
-
-function HowItWorks() {
-  return (
-    <section id="how-it-works" className="bg-indigo-50 py-24">
-      <div className="mx-auto max-w-4xl px-6">
-        <div className="text-center">
-          <h2 className="text-3xl font-bold text-gray-900 md:text-4xl">How it works</h2>
-          <p className="mt-4 text-gray-600">From sign-up to your first image in under a minute.</p>
-        </div>
-
-        <div className="mt-16 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {steps.map(({ step, title, body }) => (
-            <div key={step} className="rounded-2xl bg-white p-6 shadow-sm">
-              <span className="text-4xl font-black text-indigo-100">{step}</span>
-              <h3 className="mt-2 text-base font-semibold text-gray-900">{title}</h3>
-              <p className="mt-1 text-sm text-gray-600">{body}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ─── Pricing ───────────────────────────────────────────────────────────────────
-
-const plans = [
-  {
-    name: 'Free',
-    price: '$0',
-    period: 'forever',
-    highlight: false,
-    features: [
-      '10 generations / month',
-      'Standard quality',
-      '1:1, 16:9 aspect ratios',
-      'Saved gallery',
-    ],
-  },
-  {
-    name: 'Pro',
-    price: '$12',
-    period: 'per month',
-    highlight: true,
-    features: [
-      '200 generations / month',
-      'HD quality',
-      'All aspect ratios',
-      'Priority queue',
-      'Model selector',
-    ],
-  },
-  {
-    name: 'Enterprise',
-    price: 'Custom',
-    period: 'contact us',
-    highlight: false,
-    features: [
-      '2000+ generations / month',
-      'Dedicated capacity',
-      'API access',
-      'Team workspaces',
-      'SLA',
-    ],
-  },
-];
-
-function Pricing() {
-  return (
-    <section id="pricing" className="bg-white py-24">
-      <div className="mx-auto max-w-5xl px-6">
-        <div className="text-center">
-          <h2 className="text-3xl font-bold text-gray-900 md:text-4xl">Simple pricing</h2>
-          <p className="mt-4 text-gray-600">Start free. Upgrade when you need more.</p>
-        </div>
-
-        <div className="mt-16 grid gap-8 md:grid-cols-3">
-          {plans.map((plan) => (
-            <div
-              key={plan.name}
-              className={`rounded-2xl p-8 ${
-                plan.highlight
-                  ? 'bg-indigo-600 text-white shadow-2xl ring-4 ring-indigo-300'
-                  : 'border border-gray-200 bg-gray-50'
-              }`}
-            >
-              <p
-                className={`text-sm font-semibold uppercase tracking-wider ${plan.highlight ? 'text-indigo-200' : 'text-indigo-600'}`}
-              >
-                {plan.name}
-              </p>
-              <p
-                className={`mt-2 text-4xl font-extrabold ${plan.highlight ? 'text-white' : 'text-gray-900'}`}
-              >
-                {plan.price}
-              </p>
-              <p className={`text-sm ${plan.highlight ? 'text-indigo-200' : 'text-gray-500'}`}>
-                {plan.period}
-              </p>
-
-              <ul className="mt-6 space-y-2">
-                {plan.features.map((f) => (
-                  <li
-                    key={f}
-                    className={`flex items-center gap-2 text-sm ${plan.highlight ? 'text-indigo-100' : 'text-gray-700'}`}
-                  >
-                    <span className={plan.highlight ? 'text-indigo-300' : 'text-indigo-500'}>
-                      ✓
+              <div className="flex flex-col gap-[9px]">
+                {p.features.map((feat) => (
+                  <div key={feat} className="flex items-center gap-2 text-[13px]">
+                    <span
+                      style={{ color: p.highlight ? 'hsl(var(--primary))' : 'hsl(var(--primary))' }}
+                    >
+                      {featureIcons.check}
                     </span>
-                    {f}
-                  </li>
+                    <span className="opacity-88">{feat}</span>
+                  </div>
                 ))}
-              </ul>
-
-              <Link
-                to="/register"
-                className={`mt-8 block rounded-xl py-2.5 text-center text-sm font-semibold transition-colors ${
-                  plan.highlight
-                    ? 'bg-white text-indigo-600 hover:bg-indigo-50'
-                    : 'bg-indigo-600 text-white hover:bg-indigo-700'
-                }`}
-              >
-                {plan.name === 'Enterprise' ? 'Contact us' : 'Get started'}
-              </Link>
+              </div>
+              <div className="mt-[22px]">
+                <Link
+                  to="/register"
+                  className="block w-full rounded-lg py-2.5 text-center text-[13.5px] font-medium transition-opacity hover:opacity-90"
+                  style={
+                    p.highlight
+                      ? { background: 'hsl(var(--background))', color: 'hsl(var(--foreground))' }
+                      : {
+                          background: 'transparent',
+                          color: 'hsl(var(--foreground))',
+                          border: '1px solid hsl(var(--border))',
+                        }
+                  }
+                >
+                  {p.cta}
+                </Link>
+              </div>
             </div>
           ))}
         </div>
@@ -330,56 +482,28 @@ function Pricing() {
     </section>
   );
 }
-
-// ─── CTA Banner ─────────────────────────────────────────────────────────────────
-
-function CTABanner() {
-  return (
-    <section className="bg-indigo-600 py-20">
-      <div className="mx-auto max-w-3xl px-6 text-center">
-        <h2 className="text-3xl font-bold text-white md:text-4xl">
-          Ready to create your first image?
-        </h2>
-        <p className="mt-4 text-indigo-200">
-          Join thousands of creators already using VisionCraft.
-        </p>
-        <Link
-          to="/register"
-          className="mt-8 inline-block rounded-xl bg-white px-8 py-3.5 text-base font-semibold text-indigo-600 hover:bg-indigo-50"
-        >
-          Start for free
-        </Link>
-      </div>
-    </section>
-  );
-}
-
-// ─── Footer ─────────────────────────────────────────────────────────────────────
 
 function Footer() {
   return (
-    <footer className="border-t border-gray-200 bg-gray-50 py-12">
-      <div className="mx-auto max-w-6xl px-6">
+    <footer className="border-t border-border bg-card py-12">
+      <div className="mx-auto max-w-[1200px] px-10">
         <div className="flex flex-col items-center justify-between gap-6 md:flex-row">
-          <span className="text-xl font-bold text-indigo-600">VisionCraft</span>
-          <nav className="flex flex-wrap justify-center gap-6 text-sm text-gray-500">
-            <a href="#features" className="hover:text-gray-900">
+          <VCLogo size={20} />
+          <nav className="flex flex-wrap justify-center gap-6 text-[13.5px] text-muted-foreground">
+            <a href="#features" className="hover:text-foreground transition-colors">
               Features
             </a>
-            <a href="#how-it-works" className="hover:text-gray-900">
-              How it works
-            </a>
-            <a href="#pricing" className="hover:text-gray-900">
+            <a href="#pricing" className="hover:text-foreground transition-colors">
               Pricing
             </a>
-            <Link to="/login" className="hover:text-gray-900">
+            <Link to="/login" className="hover:text-foreground transition-colors">
               Sign in
             </Link>
-            <Link to="/register" className="hover:text-gray-900">
+            <Link to="/register" className="hover:text-foreground transition-colors">
               Sign up
             </Link>
           </nav>
-          <p className="text-xs text-gray-400">
+          <p className="text-[12px] text-muted-foreground">
             © {new Date().getFullYear()} VisionCraft. All rights reserved.
           </p>
         </div>
@@ -388,18 +512,18 @@ function Footer() {
   );
 }
 
-// ─── Page ───────────────────────────────────────────────────────────────────────
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function HomePage() {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+
   return (
-    <div className="min-h-screen bg-white">
-      <Header />
+    <div className="min-h-screen bg-background">
+      <Navbar isAuthenticated={isAuthenticated} />
       <main>
-        <Hero />
+        <Hero isAuthenticated={isAuthenticated} />
         <Features />
-        <HowItWorks />
         <Pricing />
-        <CTABanner />
       </main>
       <Footer />
     </div>

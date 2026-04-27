@@ -1,7 +1,4 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
-import { RowsPhotoAlbum } from 'react-photo-album';
-import 'react-photo-album/rows.css';
-import type { RenderPhotoProps, RenderPhotoContext } from 'react-photo-album';
 import type { Image } from '@ai-platform/types';
 import { ImageCard } from './ImageCard';
 import { GalleryLightbox } from './GalleryLightbox';
@@ -12,13 +9,6 @@ interface ImageGridProps {
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
   onLoadMore: () => void;
-}
-
-interface AlbumPhoto {
-  src: string;
-  width: number;
-  height: number;
-  key: string;
 }
 
 export function ImageGrid({ images, hasNextPage, isFetchingNextPage, onLoadMore }: ImageGridProps) {
@@ -43,43 +33,19 @@ export function ImageGrid({ images, hasNextPage, isFetchingNextPage, onLoadMore 
     };
   }, [handleObserver]);
 
-  const photos: AlbumPhoto[] = images.map((img) => ({
-    src: img.cdnUrl ?? img.url,
-    width: img.width || 512,
-    height: img.height || 512,
-    key: img.id,
-  }));
-
-  if (images.length === 0) {
-    return (
-      <div className="flex h-64 items-center justify-center text-gray-500">
-        No saved images yet. Generate some images to get started!
-      </div>
-    );
-  }
-
   return (
     <div>
-      <RowsPhotoAlbum
-        photos={photos}
-        render={{
-          photo: (_props: RenderPhotoProps, context: RenderPhotoContext<AlbumPhoto>) => {
-            const image = images.find((img) => img.id === context.photo.key);
-            const index = images.findIndex((img) => img.id === context.photo.key);
-            if (!image) return null;
-            return (
-              <ImageCard
-                key={context.photo.key}
-                image={image}
-                onClick={() => setLightboxIndex(index)}
-              />
-            );
-          },
-        }}
-      />
+      {/* CSS columns masonry grid */}
+      <div className="columns-4 gap-3.5">
+        {images.map((image, index) => (
+          <div key={image.id} className="mb-3.5 break-inside-avoid">
+            <ImageCard image={image} onClick={() => setLightboxIndex(index)} />
+          </div>
+        ))}
+      </div>
 
       {/* Infinite scroll sentinel */}
-      <div ref={sentinelRef} className="mt-4 flex justify-center">
+      <div ref={sentinelRef} className="mt-4 flex justify-center py-2">
         {isFetchingNextPage && <Spinner size="md" />}
       </div>
 
