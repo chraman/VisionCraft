@@ -129,8 +129,8 @@ export default function DashboardPage() {
   const { data: quota } = useQuota();
   const { data: imagesData, isLoading } = useSavedImages({ limit: 8 });
 
-  const recentImages = imagesData?.pages.flatMap((p) => p.data).slice(0, 8) ?? [];
-  const savedCount = imagesData?.pages[0]?.pagination.total ?? 0;
+  const recentImages = imagesData?.pages.flatMap((p) => p?.data ?? []).slice(0, 8) ?? [];
+  const savedCount = imagesData?.pages[0]?.pagination?.total ?? 0;
   const usedPct = quota ? Math.round((quota.used / quota.limit) * 100) : 0;
 
   const firstName = user?.name?.split(' ')[0] ?? 'there';

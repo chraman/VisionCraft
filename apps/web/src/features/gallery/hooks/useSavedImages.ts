@@ -8,7 +8,7 @@ export function useSavedImages(params: Omit<CursorPaginationParams, 'cursor'> = 
     queryFn: ({ pageParam }) =>
       getSavedImages({ ...params, cursor: pageParam as string | undefined }),
     initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) => lastPage.pagination.nextCursor ?? undefined,
+    getNextPageParam: (lastPage) => lastPage?.pagination?.nextCursor ?? undefined,
     staleTime: 2 * 60 * 1000, // 2 min
   });
 }

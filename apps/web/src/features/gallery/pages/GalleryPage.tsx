@@ -64,8 +64,8 @@ export default function GalleryPage() {
   const { data, isLoading, isError, hasNextPage, isFetchingNextPage, fetchNextPage } =
     useSavedImages({ limit: 20 });
 
-  const images = data?.pages.flatMap((page) => page.data) ?? [];
-  const total = data?.pages[0]?.pagination.total ?? 0;
+  const images = data?.pages.flatMap((page) => page?.data ?? []) ?? [];
+  const total = data?.pages[0]?.pagination?.total ?? 0;
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
