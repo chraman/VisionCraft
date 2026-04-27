@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { RegisterForm } from '../components/RegisterForm';
 import { OAuthButton } from '../components/OAuthButton';
@@ -25,7 +26,10 @@ function GradientTile({ style }: { style?: React.CSSProperties }) {
 
 function VCLogo() {
   return (
-    <span className="flex items-center gap-2 text-foreground">
+    <Link
+      to="/"
+      className="flex items-center gap-2 text-foreground hover:opacity-80 transition-opacity w-fit"
+    >
       <svg width={20} height={20} viewBox="0 0 24 24" fill="none">
         <rect
           x="2.5"
@@ -42,11 +46,15 @@ function VCLogo() {
       <span className="font-display text-[15.6px] font-semibold tracking-[-0.4px]">
         VisionCraft
       </span>
-    </span>
+    </Link>
   );
 }
 
 export default function RegisterPage() {
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
   return (
     <div className="grid min-h-screen" style={{ gridTemplateColumns: '1fr 1fr' }}>
       {/* Left — form */}
