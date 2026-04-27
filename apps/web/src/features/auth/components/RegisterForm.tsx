@@ -27,8 +27,11 @@ export function RegisterForm() {
   const {
     register,
     handleSubmit,
-    formState: { errors },
-  } = useForm<RegisterFormData>({ resolver: zodResolver(registerSchema) });
+    formState: { errors, isValid },
+  } = useForm<RegisterFormData>({
+    resolver: zodResolver(registerSchema),
+    mode: 'onTouched',
+  });
 
   function handleFirstFocus() {
     if (!signupStartedFired.current) {
@@ -116,7 +119,7 @@ export function RegisterForm() {
         )}
       </div>
 
-      <Button type="submit" className="w-full" disabled={isPending}>
+      <Button type="submit" className="w-full" disabled={isPending || !isValid}>
         {isPending ? 'Creating account…' : 'Create account'}
       </Button>
     </form>
