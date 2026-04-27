@@ -17,13 +17,13 @@
     "@radix-ui/react-slot": "^1.1.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "tailwind-merge": "^2.6.0"
+    "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {
     "@ai-platform/types": "workspace:*",
     "@ai-platform/utils": "workspace:*",
-    "@types/react": "^18.3.18",
-    "react": "^18.3.1",
+    "@types/react": "^19.2.14",
+    "react": "^19.2.5",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.2"
   },
