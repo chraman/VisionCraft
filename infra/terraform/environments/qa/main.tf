@@ -91,8 +91,9 @@ module "alb" {
 # ─── S3 + CloudFront (frontend) ───────────────────────────────────────────────
 
 module "s3_frontend" {
-  source      = "../../modules/s3-frontend"
-  environment = local.environment
+  source       = "../../modules/s3-frontend"
+  environment  = local.environment
+  alb_dns_name = module.alb.alb_dns_name
 }
 
 # ─── Secrets stubs ────────────────────────────────────────────────────────────
@@ -125,11 +126,11 @@ module "api_gateway" {
     NODE_ENV                  = "production"
     AWS_ENVIRONMENT           = local.environment
     PORT                      = "3000"
-    AUTH_SERVICE_URL          = "http://auth-service.internal:3001"
-    USER_SERVICE_URL          = "http://user-service.internal:3002"
-    IMAGE_SERVICE_URL         = "http://image-service.internal:3003"
-    NOTIFICATION_SERVICE_URL  = "http://notification-service.internal:3004"
-    ANALYTICS_SERVICE_URL     = "http://analytics-service.internal:3005"
+    AUTH_SERVICE_URL          = "http://auth-service:3001"
+    USER_SERVICE_URL          = "http://user-service:3002"
+    IMAGE_SERVICE_URL         = "http://image-service:3003"
+    NOTIFICATION_SERVICE_URL  = "http://notification-service:3004"
+    ANALYTICS_SERVICE_URL     = "http://analytics-service:3005"
   }
 
   secrets = {
@@ -221,7 +222,7 @@ module "image_service" {
     AWS_REGION          = var.aws_region
     AWS_BUCKET_GENERATED = "qa-ai-images-generated"
     AWS_BUCKET_UPLOADS   = "qa-ai-images-uploads"
-    AI_SERVICE_URL      = "http://ai-service.internal:8000"
+    AI_SERVICE_URL      = "http://ai-service:8000"
   }
 
   secrets = {
@@ -306,8 +307,8 @@ module "image_worker" {
     AWS_REGION          = var.aws_region
     AWS_BUCKET_GENERATED = "qa-ai-images-generated"
     AWS_BUCKET_UPLOADS   = "qa-ai-images-uploads"
-    IMAGE_SERVICE_URL   = "http://image-service.internal:3003"
-    AI_SERVICE_URL      = "http://ai-service.internal:8000"
+    IMAGE_SERVICE_URL   = "http://image-service:3003"
+    AI_SERVICE_URL      = "http://ai-service:8000"
   }
 
   secrets = {

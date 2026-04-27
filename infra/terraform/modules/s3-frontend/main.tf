@@ -1,4 +1,32 @@
-variable "environment" { type = string }
+variable "environment"  { type = string }
+variable "alb_dns_name" { type = string }
+
+resource "aws_s3_bucket" "cf_logs" {
+  bucket = "visioncraft-cf-logs-${var.environment}"
+  tags   = { Name = "visioncraft-cf-logs-${var.environment}" }
+}
+
+resource "aws_s3_bucket_public_access_block" "cf_logs" {
+  bucket                  = aws_s3_bucket.cf_logs.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# CloudFront standard logging requires BucketOwnerPreferred + log-delivery-write ACL
+resource "aws_s3_bucket_ownership_controls" "cf_logs" {
+  bucket = aws_s3_bucket.cf_logs.id
+  rule {
+    object_ownership = "BucketOwnerPreferred"
+  }
+}
+
+resource "aws_s3_bucket_acl" "cf_logs" {
+  depends_on = [aws_s3_bucket_ownership_controls.cf_logs]
+  bucket     = aws_s3_bucket.cf_logs.id
+  acl        = "log-delivery-write"
+}
 
 resource "aws_s3_bucket" "frontend" {
   bucket = "visioncraft-frontend-${var.environment}"
@@ -22,16 +50,51 @@ resource "aws_cloudfront_origin_access_control" "frontend" {
 }
 
 resource "aws_cloudfront_distribution" "frontend" {
+  # S3 origin — serves static frontend assets
   origin {
     domain_name              = aws_s3_bucket.frontend.bucket_regional_domain_name
     origin_id                = "S3-visioncraft-frontend-${var.environment}"
     origin_access_control_id = aws_cloudfront_origin_access_control.frontend.id
   }
 
+  # ALB origin — proxies /api/* to the backend over HTTP (CF→ALB is internal, not browser-facing)
+  origin {
+    domain_name = var.alb_dns_name
+    origin_id   = "ALB-api-${var.environment}"
+
+    custom_origin_config {
+      http_port              = 80
+      https_port             = 443
+      origin_protocol_policy = "http-only"
+      origin_ssl_protocols   = ["TLSv1.2"]
+    }
+  }
+
   enabled             = true
   is_ipv6_enabled     = true
   default_root_object = "index.html"
   comment             = "VisionCraft ${var.environment} frontend"
+
+  # /api/* → ALB (no caching, forward cookies + auth headers for JWT and refresh token)
+  ordered_cache_behavior {
+    path_pattern           = "/api/*"
+    allowed_methods        = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods         = ["GET", "HEAD"]
+    target_origin_id       = "ALB-api-${var.environment}"
+    viewer_protocol_policy = "https-only"
+    compress               = false
+
+    forwarded_values {
+      query_string = true
+      headers      = ["Authorization", "Origin", "Accept", "Content-Type",
+                      "Access-Control-Request-Headers", "Access-Control-Request-Method"]
+      cookies { forward = "all" }
+    }
+
+    min_ttl     = 0
+    default_ttl = 0
+    max_ttl     = 0
+  }
 
   default_cache_behavior {
     allowed_methods        = ["GET", "HEAD", "OPTIONS"]
@@ -65,6 +128,12 @@ resource "aws_cloudfront_distribution" "frontend" {
 
   restrictions {
     geo_restriction { restriction_type = "none" }
+  }
+
+  logging_config {
+    include_cookies = false
+    bucket          = aws_s3_bucket.cf_logs.bucket_domain_name
+    prefix          = "cloudfront/"
   }
 
   viewer_certificate {

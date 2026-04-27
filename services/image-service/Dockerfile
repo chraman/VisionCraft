@@ -14,6 +14,7 @@ COPY --from=builder /repo .
 RUN pnpm deploy --legacy --filter=@ai-platform/image-service --prod /app
 
 FROM node:20-alpine AS runner
+RUN apk add --no-cache curl
 WORKDIR /app
 COPY --from=deployer /app .
 EXPOSE 3003

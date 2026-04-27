@@ -21,7 +21,7 @@ export const SERVICE_PORTS = {
 //
 // Dev fallback:  http://localhost:<port>
 // QA/Prod:       set the env var to the ECS Service Connect hostname, e.g.
-//                AUTH_SERVICE_URL=http://auth-service.internal:3001
+//                AUTH_SERVICE_URL=http://auth-service:3001
 
 export const SERVICE_URLS = {
   AUTH: () => process.env['AUTH_SERVICE_URL'] ?? `http://localhost:${SERVICE_PORTS.AUTH}`,
