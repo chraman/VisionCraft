@@ -7,10 +7,12 @@
   "exports": {
     ".": {
       "types": "./src/index.ts",
+      "import": "./src/index.ts",
       "default": "./dist/index.js"
     },
     "./analytics": {
       "types": "./src/analytics.ts",
+      "import": "./src/analytics.ts",
       "default": "./dist/analytics.js"
     }
   },
