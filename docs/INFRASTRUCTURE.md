@@ -244,9 +244,11 @@ ECS needs to pull Docker images from somewhere. We use ECR instead of Docker Hub
 
 Without Service Connect, services would need to know each other's IP addresses, which change every time a container restarts. Service Connect registers each service under a DNS name so:
 
-- `api-gateway` calls `http://auth-service.internal:3001` — works forever, even after restarts
-- `image-worker` calls `http://ai-service.internal:8000` — same thing
+- `api-gateway` calls `http://auth-service:3001` — works forever, even after restarts
+- `image-worker` calls `http://ai-service:8000` — same thing
 - No hard-coded IPs, no service registries, just DNS
+
+> **Hostname format:** Service Connect uses the plain service name as the DNS alias (e.g. `auth-service`, not `auth-service.internal`). The namespace is named `internal` in Cloud Map, but that is only an organisational label — the Envoy sidecar intercepts connections to the short name. Set `AUTH_SERVICE_URL=http://auth-service:3001`, not `http://auth-service.internal:3001`.
 
 ---
 
@@ -282,7 +284,7 @@ SERVICE_NAME, NODE_ENV=production, APP_ENV=qa, PORT
 AWS_REGION=ap-south-1
 # Service-specific:
 AWS_BUCKET_GENERATED=qa-ai-images-generated   (image-service, image-worker)
-AUTH_SERVICE_URL=http://auth-service.internal:3001   (api-gateway)
+AUTH_SERVICE_URL=http://auth-service:3001   (api-gateway — plain name, no .internal suffix)
 ... etc.
 ```
 
@@ -663,15 +665,15 @@ module.s3_frontend
    - Checks rate limit in Redis (ratelimit:{userId}:/api/v1/images/generate)
    - Forwards to image-service via Service Connect DNS
 
-4. image-service (http://image-service.internal:3003)
+4. image-service (http://image-service:3003)
    - Creates a GenerationJob record in RDS PostgreSQL
    - Pushes job ID to BullMQ queue in Redis
 
-5. image-worker (http://image-worker.internal:3006)
+5. image-worker (http://image-worker:3006)
    - BullMQ consumer picks up the job from Redis
    - Calls ai-service via Service Connect DNS
 
-6. ai-service (http://ai-service.internal:8000)  [FastAPI Python]
+6. ai-service (http://ai-service:8000)  [FastAPI Python]
    - Calls Stability AI API with the prompt
    - On success: uploads result image to S3 (qa-ai-images-generated)
    - Returns S3 key to image-worker
@@ -743,8 +745,9 @@ module.s3_frontend
    - Returns 200 → deployment successful
 
 7. DB migration + seed (ECS one-off task)
-   - aws ecs run-task with command: pnpm prisma migrate deploy
+   - aws ecs run-task with command: node_modules/.bin/prisma migrate deploy
    - Runs inside the VPC (private subnet) so it can reach RDS directly
+   - Uses the Prisma version bundled in the container (avoids pulling a mismatched version from npm)
 
 8. E2E tests (Playwright)
    - pnpm test:e2e against the live CloudFront domain

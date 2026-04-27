@@ -1,0 +1,8 @@
+{
+  "containerOverrides": [
+    {
+      "name": "auth-service",
+      "command": ["sh", "-c", "node_modules/.bin/prisma migrate deploy"]
+    }
+  ]
+}

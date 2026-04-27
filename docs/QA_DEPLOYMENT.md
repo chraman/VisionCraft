@@ -20,6 +20,7 @@ Deploying to QA is a single `git push origin qa` once the one-time setup below i
 6. [Monitoring a QA deployment](#monitoring-a-qa-deployment)
 7. [Resetting the QA database](#resetting-the-qa-database)
 8. [Troubleshooting](#troubleshooting)
+9. [npm scripts for Docker and AWS operations](#npm-scripts-for-docker-and-aws-operations)
 
 ---
 
@@ -32,7 +33,7 @@ Pushing to the `qa` branch triggers the `.github/workflows/deploy-qa.yml` workfl
 3. Deploys all services to the `visioncraft-qa` ECS cluster via rolling update
 4. Deploys the frontend to S3 + CloudFront (QA distribution) and posts a preview URL
 5. Waits for the ALB health check to pass (`GET /health` on api-gateway)
-6. Runs `prisma migrate deploy` as a one-off ECS task (inside the VPC, with RDS access)
+6. Runs `node_modules/.bin/prisma migrate deploy` as a one-off ECS task (inside the VPC, with RDS access — uses the Prisma version pinned in the container, not whatever `npx` resolves)
 7. Runs the seed script — creates `alice`, `bob`, and `admin` test accounts
 8. Runs all Playwright E2E tests against the live URLs
 9. Uploads a Playwright HTML report as a workflow artifact
@@ -322,8 +323,10 @@ aws ecs run-task \
   --task-definition visioncraft-qa-auth-service \
   --launch-type FARGATE \
   --network-configuration "awsvpcConfiguration={subnets=[$SUBNET],securityGroups=[$SG],assignPublicIp=DISABLED}" \
-  --overrides '{"containerOverrides":[{"name":"auth-service","command":["sh","-c","pnpm prisma migrate deploy"]}]}'
+  --overrides '{"containerOverrides":[{"name":"auth-service","command":["sh","-c","node_modules/.bin/prisma migrate deploy"]}]}'
 ```
+
+> **Why `node_modules/.bin/prisma` instead of `npx prisma` or `pnpm prisma`?** Running `npx prisma migrate deploy` inside the container resolves the latest Prisma release from npm (currently v7.x), which introduced breaking schema changes and will fail against the v6 Prisma schema. `node_modules/.bin/prisma` runs the exact version bundled in the image — guaranteed to match the schema. `prisma` is a production dependency in `auth-service/package.json` so it is always present in the container.
 
 ---
 
@@ -473,7 +476,7 @@ aws ecs run-task \
   --task-definition visioncraft-qa-auth-service \
   --launch-type FARGATE \
   --network-configuration "awsvpcConfiguration={subnets=[$SUBNET],securityGroups=[$SG],assignPublicIp=DISABLED}" \
-  --overrides '{"containerOverrides":[{"name":"auth-service","command":["sh","-c","pnpm prisma migrate reset --force && cd ../../infra/scripts && pnpm seed"]}]}'
+  --overrides '{"containerOverrides":[{"name":"auth-service","command":["sh","-c","node_modules/.bin/prisma migrate reset --force && cd ../../infra/scripts && pnpm seed"]}]}'
 ```
 
 > `prisma migrate reset` drops all data. Never run this against production.
@@ -541,8 +544,171 @@ Then force a new ECS deployment for api-gateway so it picks up the new value:
 aws ecs update-service --cluster visioncraft-qa --service api-gateway --force-new-deployment
 ```
 
+### ECS tasks stay in PENDING or fail health checks — `curl: not found`
+
+Node.js services use `node:20-alpine` as the base image. Alpine does not include `curl` by default, so the ECS task health check (`curl -f http://localhost:{port}/health`) fails immediately and ECS keeps replacing the task.
+
+**Fix:** All service Dockerfiles in this repo add `RUN apk add --no-cache curl` in the runner stage. If you see `curl: not found` in task stop logs, rebuild and push the image:
+
+```bash
+export ECR_REGISTRY=<your-ecr-registry>
+pnpm docker:build-push:auth-service   # or whichever service is failing
+pnpm ecs:deploy:auth-service
+```
+
+### Service Connect — 503 / connection refused between services
+
+Services call each other using ECS Service Connect. The Envoy sidecar intercepts connections to the **plain service name**, not the namespace-qualified name. Use:
+
+```
+AUTH_SERVICE_URL=http://auth-service:3001        ✅ correct
+AUTH_SERVICE_URL=http://auth-service.internal:3001  ❌ Envoy won't intercept — connection refused
+```
+
+This applies to all service-to-service URLs. Check `infra/terraform/environments/qa/main.tf` — all `*_SERVICE_URL` env vars should use plain hostnames. If you change them, force a new deployment of api-gateway for the change to take effect:
+
+```bash
+pnpm ecs:deploy:api-gateway
+```
+
+### Prisma migration fails — `url` property error or wrong version
+
+Running `npx prisma migrate deploy` or `pnpm exec prisma migrate deploy` inside the container resolves the Prisma CLI from npm at runtime. If npm resolves Prisma 7.x (which removed the `url` property from the datasource block), the migration command will crash before reaching the database.
+
+**Always run migrations using the version bundled in the container:**
+
+```bash
+node_modules/.bin/prisma migrate deploy
+```
+
+The `db:migrate:qa` npm script in the root `package.json` already uses this form. If running the task manually via AWS CLI, use `node_modules/.bin/prisma migrate deploy` as the override command — not `npx prisma migrate deploy`.
+
 ### GitHub OIDC authentication fails
 
 - Verify the `visioncraft-github-actions-deploy` IAM role exists (created by Terraform)
 - Confirm the role trust policy allows the correct GitHub repo and branch: `repo:your-org/visioncraft:environment:qa`
 - Check that `aws-actions/configure-aws-credentials@v4` is using `role-to-assume` (not access keys)
+
+---
+
+## npm scripts for Docker and AWS operations
+
+The root `package.json` provides scripts for all common Docker and AWS operations. Run all commands from the monorepo root.
+
+### Required environment variables
+
+Set these before running any `docker:*`, `ecs:*`, `db:*`, or `web:*` script:
+
+```bash
+# Git Bash / macOS / Linux
+export ECR_REGISTRY=553138587052.dkr.ecr.ap-south-1.amazonaws.com   # your ECR registry
+export CF_DISTRIBUTION_ID_QA=<your-cloudfront-distribution-id>
+
+# Only needed for db:migrate:qa
+export ECS_PRIVATE_SUBNET=subnet-xxxxxxxx   # terraform output private_subnet_id
+export ECS_APP_SG=sg-xxxxxxxx              # terraform output app_security_group_id
+```
+
+```powershell
+# PowerShell
+$env:ECR_REGISTRY = "553138587052.dkr.ecr.ap-south-1.amazonaws.com"
+$env:CF_DISTRIBUTION_ID_QA = "<your-cloudfront-distribution-id>"
+$env:ECS_PRIVATE_SUBNET = "subnet-xxxxxxxx"
+$env:ECS_APP_SG = "sg-xxxxxxxx"
+```
+
+> Get your values: `terraform -chdir=infra/terraform/environments/qa output`
+
+### ECR authentication
+
+```bash
+pnpm docker:ecr-login
+```
+
+Must be run before any `docker:push:*` or `docker:build-push:*`. The session lasts 12 hours.
+
+### Build and push a service image
+
+```bash
+# Build only
+pnpm docker:build:auth-service
+
+# Push only (image must already be built and tagged)
+pnpm docker:push:auth-service
+
+# Build + push in one step (most common)
+pnpm docker:build-push:auth-service
+```
+
+Available for: `api-gateway`, `auth-service`, `user-service`, `image-service`, `notification-service`, `analytics-service`, `image-worker`, `ai-service`.
+
+> All Node.js service Dockerfiles use the monorepo root (`.`) as build context. `ai-service` uses `ai-service/` as its context (Python service, different Dockerfile).
+
+### Force ECS redeploy
+
+After pushing a new image, force ECS to pull it:
+
+```bash
+# Single service
+pnpm ecs:deploy:auth-service
+
+# All backend services
+pnpm ecs:deploy:all
+```
+
+ECS performs a rolling update: starts new tasks, waits for health checks to pass, then drains the old tasks.
+
+### View live logs
+
+```bash
+pnpm ecs:logs:auth-service    # streams CloudWatch logs — Ctrl+C to stop
+pnpm ecs:logs:api-gateway
+```
+
+> **Windows PowerShell:** `aws logs tail` does not work correctly in PowerShell — use Git Bash, or view logs in the AWS Console: **CloudWatch → Log groups → /ecs/visioncraft-qa/\<service\>**.
+
+### Check service status
+
+```bash
+pnpm ecs:status
+```
+
+Prints a table showing running/desired count and status for all 7 backend services.
+
+### Run database migrations
+
+```bash
+export ECS_PRIVATE_SUBNET=subnet-xxxxxxxx
+export ECS_APP_SG=sg-xxxxxxxx
+pnpm db:migrate:qa
+```
+
+This launches a one-off ECS task (auth-service container, private subnet) that runs `node_modules/.bin/prisma migrate deploy` against the QA RDS instance. The task override is read from `infra/scripts/migrate-qa-override.json`.
+
+After the task starts, watch it complete:
+
+```bash
+# Get the task ARN from the run-task output, then:
+aws ecs wait tasks-stopped --cluster visioncraft-qa --tasks <task-arn> --region ap-south-1
+aws ecs describe-tasks --cluster visioncraft-qa --tasks <task-arn> --region ap-south-1 \
+  --query 'tasks[0].containers[0].exitCode'
+# 0 = success
+```
+
+### Deploy the frontend manually
+
+```bash
+# Build with QA env vars (reads apps/web/.env.qa)
+pnpm web:build:qa
+
+# Sync to S3 (JS/CSS with 1-year cache, index.html with no-cache)
+pnpm web:sync:qa
+
+# Bust CloudFront edge cache
+pnpm web:invalidate:qa
+
+# All three steps
+pnpm web:deploy:qa
+```
+
+> `web:deploy:qa` is equivalent to what GitHub Actions runs on every `qa` branch push.
