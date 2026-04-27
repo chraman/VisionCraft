@@ -3,7 +3,8 @@
   "compilerOptions": {
     "module": "CommonJS",
     "moduleResolution": "Node",
-    "noEmit": true
+    "noEmit": false,
+    "outDir": "dist"
   },
   "include": ["src/**/*"]
 }

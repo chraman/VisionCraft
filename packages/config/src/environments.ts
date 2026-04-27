@@ -4,11 +4,7 @@ const getEnv = (key: string): string | undefined =>
   typeof process !== 'undefined' ? process.env[key] : undefined;
 
 export function getAppEnv(): AppEnv {
-  const env =
-    getEnv('APP_ENV') ??
-    (typeof import.meta !== 'undefined'
-      ? (import.meta as unknown as { env?: { VITE_APP_ENV?: string } }).env?.VITE_APP_ENV
-      : undefined);
+  const env = getEnv('APP_ENV');
   if (env === 'qa' || env === 'prod') return env as AppEnv;
   return 'local';
 }

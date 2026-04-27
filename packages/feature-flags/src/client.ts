@@ -15,7 +15,8 @@ const FLAG_FILES: Record<FlagEnvironment, Record<string, FlagValue>> = {
 
 function resolveEnvironment(): FlagEnvironment {
   const env =
-    (typeof import.meta !== 'undefined' && import.meta.env?.VITE_APP_ENV) ||
+    (typeof import.meta !== 'undefined' &&
+      (import.meta as { env?: { VITE_APP_ENV?: string } }).env?.VITE_APP_ENV) ||
     (typeof process !== 'undefined' && process.env['NODE_ENV']) ||
     'development';
   if (env === 'staging' || env === 'production' || env === 'test') return env;

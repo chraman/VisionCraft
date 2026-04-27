@@ -2,14 +2,20 @@
   "name": "@ai-platform/utils",
   "version": "0.0.0",
   "private": true,
-  "main": "./src/index.ts",
+  "main": "./dist/index.js",
   "types": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./analytics": "./src/analytics.ts"
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./analytics": {
+      "types": "./src/analytics.ts",
+      "default": "./dist/analytics.js"
+    }
   },
   "scripts": {
-    "build": "tsc --noEmit",
+    "build": "tsc",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "test": "echo \"No tests for utils package\""
