@@ -1,14 +1,11 @@
 import { createLogger } from '@ai-platform/utils';
-import http from 'http';
+import { createApp } from './app.js';
 
 const logger = createLogger('user-service');
 const PORT = parseInt(process.env['PORT'] ?? '3002', 10);
 
-const server = http.createServer((_, res) => {
-  res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({ status: 'ok', service: 'user-service' }));
-});
+const app = createApp();
 
-server.listen(PORT, () => {
+app.listen(PORT, () => {
   logger.info('Service started', { action: 'startup', port: PORT });
 });

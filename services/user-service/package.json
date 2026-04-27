@@ -10,16 +10,18 @@
     "typecheck": "tsc --noEmit",
     "test": "jest --passWithNoTests"
   },
+  "prisma": {
+    "schema": "../auth-service/prisma/schema.prisma"
+  },
   "dependencies": {
     "@ai-platform/config": "workspace:*",
     "@ai-platform/types": "workspace:*",
     "@ai-platform/utils": "workspace:*",
     "@prisma/client": "^6.2.1",
-    "bullmq": "^5.33.1",
+    "prisma": "^6.2.1",
     "cors": "^2.8.5",
     "express": "^5.0.1",
     "helmet": "^8.0.0",
-    "ioredis": "^5.4.1",
     "zod": "^3.24.1"
   },
   "devDependencies": {
@@ -28,7 +30,6 @@
     "@types/jest": "^29.5.14",
     "@types/node": "^22.10.5",
     "jest": "^29.7.0",
-    "prisma": "^6.2.1",
     "supertest": "^7.0.0",
     "ts-jest": "^29.2.5",
     "ts-node-dev": "^2.0.0",
