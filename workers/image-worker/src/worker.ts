@@ -42,7 +42,9 @@ async function processJob(job: Job<GenerationJobPayload>): Promise<void> {
     const imageS3Url = s3Url(result.image_key);
     const imageCdnUrl = toCdnUrl(result.image_key);
 
-    await workerImageRepository.create({
+    // On BullMQ retry the image record may already exist (jobId is @unique).
+    // Use upsert so attempt 2+ just refreshes the record rather than crashing.
+    const createdImage = await workerImageRepository.upsert({
       userId,
       jobId,
       url: imageS3Url,
@@ -63,6 +65,7 @@ async function processJob(job: Job<GenerationJobPayload>): Promise<void> {
       jobId,
       userId,
       status: 'COMPLETED',
+      imageId: createdImage.id,
       imageUrl: imageS3Url,
       cdnUrl: imageCdnUrl,
       provider: result.provider,

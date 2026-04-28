@@ -39,6 +39,7 @@ export interface GenerationJob {
   aspectRatio: AspectRatio;
   quality: ImageQuality;
   imageId: string | null;
+  cdnUrl: string | null;
   errorMessage: string | null;
   // Reserved for Phase 2 batch generation
   batchId: string | null;

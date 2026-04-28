@@ -1,4 +1,4 @@
-import Redis from 'ioredis';
+import Redis, { type RedisOptions } from 'ioredis';
 import { createLogger } from '@ai-platform/utils';
 
 const logger = createLogger('image-worker');
@@ -10,7 +10,7 @@ let bullmqClient: Redis | null = null;
 
 const REDIS_URL = process.env['REDIS_URL'] ?? 'redis://localhost:6379';
 
-function makeClient(opts: ConstructorParameters<typeof Redis>[1]): Redis {
+function makeClient(opts: RedisOptions): Redis {
   const client = new Redis(REDIS_URL, opts);
   client.on('error', (err) => {
     logger.error('Redis connection error', { action: 'redis_error', error: err.message });

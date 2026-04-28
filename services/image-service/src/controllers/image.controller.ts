@@ -3,6 +3,7 @@ import { createLogger } from '@ai-platform/utils';
 import { REDIS_KEYS } from '@ai-platform/config';
 import { imageService } from '../services/image.service';
 import { jobRepository } from '../repositories/job.repository';
+import { imageRepository } from '../repositories/image.repository';
 import { getRedis, getSubscriber } from '../lib/redis';
 import {
   generateTextSchema,
@@ -98,12 +99,10 @@ export const imageController = {
     const { id: jobId } = req.params as { id: string };
 
     if (!userId) {
-      res
-        .status(401)
-        .json({
-          success: false,
-          error: { code: 'UNAUTHORIZED', message: 'Missing user identity' },
-        });
+      res.status(401).json({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'Missing user identity' },
+      });
       return;
     }
 
@@ -122,51 +121,68 @@ export const imageController = {
       res.setHeader('X-Accel-Buffering', 'no');
       res.flushHeaders();
 
-      // Send current cached state immediately
+      // Await cached state before deciding whether to close — avoids race where
+      // res.end() fires before the Redis GET resolves.
       void getRedis()
         .get(REDIS_KEYS.jobStatus(jobId))
         .then((cached) => {
-          if (cached) res.write(`data: ${cached}\n\n`);
-        });
+          if (cached && !res.writableEnded) res.write(`data: ${cached}\n\n`);
 
-      // If already terminal, close immediately
-      if (job.status === 'COMPLETED' || job.status === 'FAILED') {
-        res.end();
-        return;
-      }
-
-      const channel = REDIS_KEYS.jobStatus(jobId);
-      const subscriber = getSubscriber();
-
-      const heartbeat = setInterval(() => {
-        if (!res.writableEnded) res.write(': heartbeat\n\n');
-      }, 30_000);
-
-      const cleanup = () => {
-        clearInterval(heartbeat);
-        void subscriber.unsubscribe(channel).then(() => subscriber.disconnect());
-        if (!res.writableEnded) res.end();
-      };
-
-      void subscriber.subscribe(channel).then(() => {
-        subscriber.on('message', (_ch: string, message: string) => {
-          if (!res.writableEnded) res.write(`data: ${message}\n\n`);
-          try {
-            const update = JSON.parse(message) as { status: string };
-            if (update.status === 'COMPLETED' || update.status === 'FAILED') {
-              cleanup();
-            }
-          } catch {
-            // ignore malformed messages
+          // If already terminal, close after flushing cached state
+          if (job.status === 'COMPLETED' || job.status === 'FAILED') {
+            res.end();
+            return;
           }
+
+          const channel = REDIS_KEYS.jobStatus(jobId);
+          const subscriber = getSubscriber();
+
+          const heartbeat = setInterval(() => {
+            if (!res.writableEnded) res.write(': heartbeat\n\n');
+          }, 30_000);
+
+          const cleanup = () => {
+            clearInterval(heartbeat);
+            void subscriber.unsubscribe(channel).then(() => subscriber.disconnect());
+            if (!res.writableEnded) res.end();
+          };
+
+          void subscriber.subscribe(channel).then(() => {
+            subscriber.on('message', (_ch: string, message: string) => {
+              if (!res.writableEnded) res.write(`data: ${message}\n\n`);
+              try {
+                const update = JSON.parse(message) as { status: string };
+                if (update.status === 'COMPLETED' || update.status === 'FAILED') {
+                  cleanup();
+                }
+              } catch {
+                // ignore malformed messages
+              }
+            });
+          });
+
+          req.on('close', cleanup);
+          req.on('finish', cleanup);
+
+          logger.info('SSE stream opened', { action: 'sse_open', jobId, userId });
         });
-      });
-
-      req.on('close', cleanup);
-      req.on('finish', cleanup);
-
-      logger.info('SSE stream opened', { action: 'sse_open', jobId, userId });
     });
+  },
+
+  async getImageById(req: Request, res: Response): Promise<void> {
+    const userId = getUserId(req);
+    const { id } = req.params as { id: string };
+    const image = await imageRepository.findByIdAndUser(id, userId);
+    if (!image) {
+      res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Image not found' },
+        requestId: requestId(res),
+      });
+      return;
+    }
+    const target = image.cdnUrl ?? image.url;
+    res.redirect(302, target);
   },
 
   async listImages(req: Request, res: Response): Promise<void> {

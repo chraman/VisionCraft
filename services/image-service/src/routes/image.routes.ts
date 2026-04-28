@@ -29,3 +29,6 @@ imageRouter.get('/', asyncHandler(imageController.listImages));
 imageRouter.post('/:id/save', asyncHandler(imageController.saveImage));
 
 imageRouter.delete('/:id', asyncHandler(imageController.deleteImage));
+
+// Must be last — matches any /:id not already claimed above
+imageRouter.get('/:id', asyncHandler(imageController.getImageById));

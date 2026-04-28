@@ -13,9 +13,10 @@ export type CreateImageData = {
 };
 
 export const workerImageRepository = {
-  async create(data: CreateImageData): Promise<{ id: string }> {
-    const image = await prisma.image.create({
-      data: {
+  async upsert(data: CreateImageData): Promise<{ id: string }> {
+    const image = await prisma.image.upsert({
+      where: { jobId: data.jobId },
+      create: {
         userId: data.userId,
         jobId: data.jobId,
         url: data.url,
@@ -26,6 +27,15 @@ export const workerImageRepository = {
         width: data.width,
         height: data.height,
         isSaved: false,
+      },
+      update: {
+        url: data.url,
+        cdnUrl: data.cdnUrl,
+        model: data.model,
+        provider: data.provider,
+        width: data.width,
+        height: data.height,
+        version: { increment: 1 },
       },
       select: { id: true },
     });

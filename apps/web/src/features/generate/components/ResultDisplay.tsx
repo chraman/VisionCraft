@@ -203,7 +203,9 @@ export function ResultDisplay({ jobId, onClear }: ResultDisplayProps) {
 
   // ── Success ───────────────────────────────────────────────────────────────
   if (job.status === 'COMPLETED' && job.imageId) {
-    const imgSrc = `/api/v1/images/${job.imageId}`;
+    // Prefer the CDN/MinIO URL delivered via SSE — avoids an extra round-trip
+    // through the gateway. Fall back to the API redirect route if unavailable.
+    const imgSrc = job.cdnUrl ?? `/api/v1/images/${job.imageId}`;
 
     return (
       <div>

@@ -15,6 +15,7 @@ export interface JobStatusUpdate {
   jobId: string;
   userId: string;
   status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+  imageId?: string;
   imageUrl?: string;
   cdnUrl?: string;
   provider?: string;
