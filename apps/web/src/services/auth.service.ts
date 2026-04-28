@@ -56,5 +56,6 @@ export async function getMe(): Promise<User> {
 }
 
 export function loginWithGoogle(): void {
-  window.location.href = API_ROUTES.AUTH.GOOGLE;
+  const base = import.meta.env.VITE_API_BASE_URL ?? '';
+  window.location.href = `${base}${API_ROUTES.AUTH.GOOGLE}`;
 }

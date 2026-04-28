@@ -28,7 +28,7 @@ export default function OAuthCallbackPage() {
       setAccessToken(token);
       setUser(user);
       track({ event: 'login', userId: user.id });
-      navigate('/generate', { replace: true });
+      navigate('/dashboard', { replace: true });
     } catch {
       navigate('/login?error=oauth_failed', { replace: true });
     }

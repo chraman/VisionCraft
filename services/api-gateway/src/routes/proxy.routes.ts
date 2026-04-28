@@ -21,6 +21,8 @@ async function proxyRequest(req: Request, res: Response, targetUrl: string): Pro
     params: req.query,
     // Don't throw on 4xx/5xx — pass them through
     validateStatus: () => true,
+    // Don't follow redirects — pass 3xx responses (e.g. OAuth) straight to the browser
+    maxRedirects: 0,
     // Forward cookies for refresh token handling
     withCredentials: true,
   };
@@ -30,6 +32,12 @@ async function proxyRequest(req: Request, res: Response, targetUrl: string): Pro
   // Forward Set-Cookie headers (refresh token rotation)
   if (upstream.headers['set-cookie']) {
     res.setHeader('set-cookie', upstream.headers['set-cookie']);
+  }
+
+  // Forward redirects (OAuth flows) — don't JSON-encode them
+  if (upstream.status >= 300 && upstream.status < 400 && upstream.headers['location']) {
+    res.redirect(upstream.status, upstream.headers['location'] as string);
+    return;
   }
 
   res.status(upstream.status).json(upstream.data);
