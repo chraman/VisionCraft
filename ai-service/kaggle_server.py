@@ -127,16 +127,9 @@ async def lifespan(app: FastAPI):
         pipe.vae.enable_tiling()
         models["pipe"] = pipe
 
-        # Try to build an img2img pipeline from the same components so we
-        # don't load a second copy of the weights.
-        try:
-            from diffusers import FluxImg2ImgPipeline
-            img2img = FluxImg2ImgPipeline(**pipe.components)
-            img2img.enable_model_cpu_offload()
-            models["img2img"] = img2img
-            logger.info("✅ Img2img pipeline ready.")
-        except Exception as e:
-            logger.warning(f"⚠️  FluxImg2ImgPipeline unavailable ({e}); img2img will fall back to text2img.")
+        # Flux2KleinPipeline uses a single text encoder — FluxImg2ImgPipeline
+        # requires text_encoder_2/tokenizer_2 which klein doesn't have, so we
+        # skip it and handle img2img via the text2img pipeline directly.
 
         logger.info("🚀 FLUX.2 [klein] server ready.")
 
@@ -163,12 +156,7 @@ app.add_middleware(
 
 @app.get("/health")
 def health() -> dict:
-    return {
-        "status": "ok",
-        "model":  MODEL_ID,
-        "device": DEVICE,
-        "img2img_available": "img2img" in models,
-    }
+    return {"status": "ok", "model": MODEL_ID, "device": DEVICE}
 
 
 @app.post("/generate/text")
@@ -188,7 +176,6 @@ async def generate_text(request: Request) -> Response:
     try:
         body          = await request.json()
         prompt        = str(body.get("prompt", ""))
-        neg_prompt    = body.get("negative_prompt") or None
         aspect_ratio  = str(body.get("aspect_ratio", "1:1"))
         quality       = str(body.get("quality", "standard"))
         width, height = ASPECT_TO_SIZE.get(aspect_ratio, (1024, 1024))
@@ -196,10 +183,10 @@ async def generate_text(request: Request) -> Response:
 
         logger.info(f"Text2img | prompt={prompt[:60]!r} | {width}x{height} | steps={steps}")
 
+        # Flux2KleinPipeline does not support negative_prompt
         with torch.inference_mode():
             result = pipe(
                 prompt=prompt,
-                negative_prompt=neg_prompt,
                 width=width,
                 height=height,
                 num_inference_steps=steps,
@@ -241,30 +228,17 @@ async def generate_image(
         )
         source_img = resize_for_flux(source_img, target_w, target_h)
 
-        steps = max(4, int(QUALITY_STEPS["standard"] / max(strength, 0.1)))
-
-        img2img = models.get("img2img")
-        if img2img:
-            logger.info(f"Img2img (FLUX) | prompt={prompt[:60]!r} | strength={strength} | steps={steps}")
-            with torch.inference_mode():
-                result = img2img(
-                    prompt=prompt,
-                    image=source_img,
-                    strength=min(strength, 1.0),
-                    num_inference_steps=steps,
-                    guidance_scale=1.0,
-                )
-        else:
-            # Fallback: text2img using source image dimensions + prompt
-            logger.info(f"Img2img (text fallback) | prompt={prompt[:60]!r} | {target_w}x{target_h}")
-            with torch.inference_mode():
-                result = models["pipe"](
-                    prompt=prompt,
-                    width=target_w,
-                    height=target_h,
-                    num_inference_steps=4,
-                    guidance_scale=1.0,
-                )
+        # Flux2KleinPipeline has no native img2img — generate at source dimensions
+        steps = max(4, round(8 * strength))
+        logger.info(f"Img2img (text2img) | prompt={prompt[:60]!r} | {target_w}x{target_h} | steps={steps}")
+        with torch.inference_mode():
+            result = models["pipe"](
+                prompt=prompt,
+                width=target_w,
+                height=target_h,
+                num_inference_steps=steps,
+                guidance_scale=1.0,
+            )
 
         return png_response(result.images[0])
 
