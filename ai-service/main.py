@@ -11,7 +11,14 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from routers.generation import router as generation_router
+# Configure root logger so all getLogger("ai-service") calls emit to stdout.
+# uvicorn captures stdout/stderr, so these appear in the terminal.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+
+from routers.generation import router as generation_router  # noqa: E402
 
 logger = logging.getLogger("ai-service")
 
