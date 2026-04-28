@@ -4,10 +4,16 @@ Handles text-to-image and image-to-image generation with dynamic provider failov
 Providers activated by env vars: STABILITY_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY,
 HUGGINGFACE_API_KEY, LOCAL_MODEL_URL. Priority set via PROVIDER_PRIORITY.
 """
-from fastapi import FastAPI
+import logging
+import traceback
+
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from routers.generation import router as generation_router
+
+logger = logging.getLogger("ai-service")
 
 app = FastAPI(
     title="AI Image Service",
@@ -16,6 +22,16 @@ app = FastAPI(
 )
 
 app.include_router(generation_router)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    tb = traceback.format_exc()
+    logger.error("Unhandled exception: %s\n%s", exc, tb)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc), "type": type(exc).__name__},
+    )
 
 
 class HealthResponse(BaseModel):

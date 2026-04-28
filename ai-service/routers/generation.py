@@ -1,6 +1,5 @@
 """Generation endpoints — POST /generate/text and POST /generate/image."""
 import logging
-import os
 from typing import Annotated
 
 import boto3
@@ -115,14 +114,13 @@ async def _fetch_source_image(image_url: str) -> bytes:
             resp.raise_for_status()
             return resp.content
 
-    bucket = os.getenv("AWS_BUCKET_UPLOADS", "uploads")
+    bucket = settings.aws_bucket_uploads or "uploads"
     s3_kwargs: dict = {}
     if settings.aws_access_key_id and settings.aws_secret_access_key:
         s3_kwargs["aws_access_key_id"] = settings.aws_access_key_id
         s3_kwargs["aws_secret_access_key"] = settings.aws_secret_access_key
-    endpoint_url = os.getenv("AWS_ENDPOINT_URL")
-    if endpoint_url:
-        s3_kwargs["endpoint_url"] = endpoint_url
+    if settings.aws_endpoint_url:
+        s3_kwargs["endpoint_url"] = settings.aws_endpoint_url
     s3 = boto3.client("s3", region_name=settings.aws_region, **s3_kwargs)
     try:
         obj = s3.get_object(Bucket=bucket, Key=image_url)

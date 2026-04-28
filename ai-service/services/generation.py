@@ -1,6 +1,5 @@
 """Generation service — provider failover + S3 upload."""
 import logging
-import os
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
@@ -74,9 +73,10 @@ def upload_to_s3(image_bytes: bytes, job_id: str, user_id: str) -> str:
     if settings.aws_access_key_id and settings.aws_secret_access_key:
         s3_kwargs["aws_access_key_id"] = settings.aws_access_key_id
         s3_kwargs["aws_secret_access_key"] = settings.aws_secret_access_key
-    endpoint_url = os.getenv("AWS_ENDPOINT_URL")
-    if endpoint_url:
-        s3_kwargs["endpoint_url"] = endpoint_url
+    # Use settings (pydantic-settings reads .env); don't rely on os.getenv which
+    # won't see .env values unless load_dotenv() was called separately.
+    if settings.aws_endpoint_url:
+        s3_kwargs["endpoint_url"] = settings.aws_endpoint_url
 
     s3 = boto3.client("s3", region_name=settings.aws_region, **s3_kwargs)
     try:
