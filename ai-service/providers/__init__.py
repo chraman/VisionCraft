@@ -59,6 +59,9 @@ def build_active_providers() -> list[BaseProvider]:
     Skips any provider whose key/URL is not configured.
     Called once at app startup.
     """
+    import logging
+    log = logging.getLogger("ai-service")
+
     from providers.local_provider import LocalProvider
     from providers.stability import StabilityProvider
     from providers.openai_provider import OpenAIProvider
@@ -74,8 +77,11 @@ def build_active_providers() -> list[BaseProvider]:
     }
 
     priority = [p.strip() for p in settings.provider_priority.split(",")]
-    active = [registry[p] for p in priority if p in registry and registry[p].is_available()]
 
-    # Return empty list — the failover loop will raise ProviderUnavailableError at
-    # request time, producing a proper 503 instead of crashing at startup.
+    for name, provider in registry.items():
+        log.info("Provider check: %s available=%s", name, provider.is_available())
+
+    active = [registry[p] for p in priority if p in registry and registry[p].is_available()]
+    log.info("Active providers (in order): %s", [type(p).__name__ for p in active])
+
     return active

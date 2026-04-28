@@ -35,7 +35,15 @@ async def generate_text(
     request: GenerateTextRequest,
     providers: Annotated[list[BaseProvider], Depends(get_providers)],
 ) -> GenerateResponse:
+    logger.info(
+        "generate_text called: job=%s user=%s model=%s aspect=%s quality=%s providers=%s",
+        request.job_id, request.user_id, request.model,
+        request.aspect_ratio, request.quality,
+        [type(p).__name__ for p in providers],
+    )
+
     await safety_check(prompt=request.prompt, image_bytes=None)
+    logger.info("safety_check passed: job=%s", request.job_id)
 
     try:
         img_bytes, width, height, provider_name = await generate_text_with_failover(
@@ -49,11 +57,16 @@ async def generate_text(
         logger.error("All providers failed for job %s: %s", request.job_id, err)
         raise HTTPException(status_code=503, detail=str(err)) from err
 
+    logger.info(
+        "generation done: job=%s provider=%s size=%dx%d bytes=%d",
+        request.job_id, provider_name, width, height, len(img_bytes),
+    )
+
     image_key = upload_to_s3(img_bytes, request.job_id, request.user_id)
 
     logger.info(
-        "Text generation completed: job=%s provider=%s size=%dx%d",
-        request.job_id, provider_name, width, height,
+        "Text generation completed: job=%s provider=%s size=%dx%d key=%s",
+        request.job_id, provider_name, width, height, image_key,
     )
     return GenerateResponse(
         job_id=request.job_id,

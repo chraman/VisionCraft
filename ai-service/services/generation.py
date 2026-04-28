@@ -73,10 +73,15 @@ def upload_to_s3(image_bytes: bytes, job_id: str, user_id: str) -> str:
     if settings.aws_access_key_id and settings.aws_secret_access_key:
         s3_kwargs["aws_access_key_id"] = settings.aws_access_key_id
         s3_kwargs["aws_secret_access_key"] = settings.aws_secret_access_key
-    # Use settings (pydantic-settings reads .env); don't rely on os.getenv which
-    # won't see .env values unless load_dotenv() was called separately.
     if settings.aws_endpoint_url:
         s3_kwargs["endpoint_url"] = settings.aws_endpoint_url
+
+    logger.info(
+        "upload_to_s3: bucket=%s key=%s endpoint=%s region=%s bytes=%d",
+        settings.aws_bucket_generated, key,
+        settings.aws_endpoint_url or "(default AWS)",
+        settings.aws_region, len(image_bytes),
+    )
 
     s3 = boto3.client("s3", region_name=settings.aws_region, **s3_kwargs)
     try:
@@ -86,7 +91,9 @@ def upload_to_s3(image_bytes: bytes, job_id: str, user_id: str) -> str:
             Body=image_bytes,
             ContentType="image/png",
         )
+        logger.info("upload_to_s3 succeeded: key=%s", key)
     except (BotoCoreError, ClientError) as err:
+        logger.error("upload_to_s3 failed: %s", err)
         raise RuntimeError(f"S3 upload failed: {err}") from err
 
     return key
