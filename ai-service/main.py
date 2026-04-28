@@ -1,16 +1,21 @@
 """
 AI Service — FastAPI
-Sprint 4: Full provider implementation with Stability AI, OpenAI, HuggingFace
-For now: stub endpoints
+Handles text-to-image and image-to-image generation with dynamic provider failover.
+Providers activated by env vars: STABILITY_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY,
+HUGGINGFACE_API_KEY, LOCAL_MODEL_URL. Priority set via PROVIDER_PRIORITY.
 """
 from fastapi import FastAPI
 from pydantic import BaseModel
 
+from routers.generation import router as generation_router
+
 app = FastAPI(
     title="AI Image Service",
-    description="Image generation service — Stability AI + OpenAI + HuggingFace",
-    version="0.0.0",
+    description="Image generation service — dynamic provider failover (Stability AI, OpenAI, Gemini, HuggingFace, Local)",
+    version="1.0.0",
 )
+
+app.include_router(generation_router)
 
 
 class HealthResponse(BaseModel):

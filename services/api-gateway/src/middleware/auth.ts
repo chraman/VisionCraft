@@ -44,11 +44,17 @@ export interface JwtPayload {
 
 export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   const authHeader = req.headers['authorization'];
-  if (!authHeader?.startsWith('Bearer ')) {
+  // EventSource (SSE) cannot send Authorization headers — accept token as query param fallback
+  const queryToken = typeof req.query['token'] === 'string' ? req.query['token'] : undefined;
+
+  let token: string;
+  if (authHeader?.startsWith('Bearer ')) {
+    token = authHeader.slice(7);
+  } else if (queryToken) {
+    token = queryToken;
+  } else {
     return next(new AppError('UNAUTHORIZED', 'Authentication required', 401));
   }
-
-  const token = authHeader.slice(7);
 
   let payload: JwtPayload;
   try {
