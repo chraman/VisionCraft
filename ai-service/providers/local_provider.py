@@ -2,15 +2,17 @@
 Local model provider — calls a self-hosted endpoint (Kaggle ngrok or local GPU).
 
 The endpoint at LOCAL_MODEL_URL must expose:
-  POST /generate/text  — body: {prompt, aspect_ratio, quality}  → PNG bytes
-  POST /generate/image — body: {prompt, strength}  + multipart image → PNG bytes
+  GET  /health          — {"status": "ok"}
+  POST /generate/text   — JSON body → PNG bytes
+  POST /generate/image  — multipart (image file + form fields) → PNG bytes
 
-This is intentionally simple — adapt the request/response format to match
-whichever local model server you run (diffusers FastAPI, ComfyUI API, etc.).
+See ai-service/kaggle_server.py for the reference server implementation
+(FLUX.2 [klein] 4B via diffusers on a Kaggle T4/P100 GPU).
 """
 import io
 import httpx
 from PIL import Image as PILImage
+
 from config.settings import settings
 from providers import BaseProvider, ASPECT_RATIO_TO_SIZE
 
@@ -30,21 +32,24 @@ class LocalProvider(BaseProvider):
         self, prompt: str, negative_prompt: str | None, aspect_ratio: str, quality: str
     ) -> tuple[bytes, int, int]:
         w, h = ASPECT_RATIO_TO_SIZE.get(aspect_ratio, (1024, 1024))
+
         payload: dict = {
-            "prompt": prompt,
+            "prompt":       prompt,
             "aspect_ratio": aspect_ratio,
-            "quality": quality,
-            "width": w,
-            "height": h,
+            "quality":      quality,
+            "width":        w,
+            "height":       h,
         }
         if negative_prompt:
             payload["negative_prompt"] = negative_prompt
 
+        # FLUX generation is slow (8-20s on T4) — use a generous timeout
         async with httpx.AsyncClient(timeout=300) as client:
             response = await client.post(f"{self._base()}/generate/text", json=payload)
             response.raise_for_status()
             img_bytes = response.content
 
+        # Read actual dimensions from the PNG header rather than trusting defaults
         try:
             img = PILImage.open(io.BytesIO(img_bytes))
             actual_w, actual_h = img.size
