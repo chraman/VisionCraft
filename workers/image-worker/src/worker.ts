@@ -81,16 +81,26 @@ async function processJob(job: Job<GenerationJobPayload>): Promise<void> {
     });
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-    logger.error('Job failed', {
+    const maxAttempts = job.opts.attempts ?? 1;
+    const isFinalAttempt = job.attemptsMade >= maxAttempts - 1;
+
+    logger.error('Job attempt failed', {
       action: 'job_failed',
       jobId,
       userId,
-      attempt: job.attemptsMade,
+      attempt: job.attemptsMade + 1,
+      maxAttempts,
+      isFinalAttempt,
       error: errorMessage,
     });
 
-    await workerJobRepository.markFailed(jobId, errorMessage);
-    await publishJobStatus({ jobId, userId, status: 'FAILED', errorMessage });
+    if (isFinalAttempt) {
+      // All retries exhausted — persist failure and notify UI
+      await workerJobRepository.markFailed(jobId, errorMessage);
+      await publishJobStatus({ jobId, userId, status: 'FAILED', errorMessage });
+    }
+    // On intermediate attempts: stay silent — BullMQ will retry and the SSE
+    // stays open so the UI receives COMPLETED if a later attempt succeeds.
 
     throw err; // Re-throw so BullMQ applies retry backoff
   }

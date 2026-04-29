@@ -20,6 +20,11 @@ from services.generation import (
 logger = logging.getLogger("ai-service")
 router = APIRouter(prefix="/generate", tags=["generation"])
 
+
+def _log(msg: str) -> None:
+    logger.info(msg)
+    print(msg, flush=True)
+
 _providers: list[BaseProvider] = []
 
 
@@ -35,15 +40,14 @@ async def generate_text(
     request: GenerateTextRequest,
     providers: Annotated[list[BaseProvider], Depends(get_providers)],
 ) -> GenerateResponse:
-    logger.info(
-        "generate_text called: job=%s user=%s model=%s aspect=%s quality=%s providers=%s",
-        request.job_id, request.user_id, request.model,
-        request.aspect_ratio, request.quality,
-        [type(p).__name__ for p in providers],
+    _log(
+        f"[ai-service] generate_text: job={request.job_id} user={request.user_id} "
+        f"model={request.model} aspect={request.aspect_ratio} quality={request.quality} "
+        f"providers={[type(p).__name__ for p in providers]}"
     )
 
     await safety_check(prompt=request.prompt, image_bytes=None)
-    logger.info("safety_check passed: job=%s", request.job_id)
+    _log(f"[ai-service] safety_check passed: job={request.job_id}")
 
     try:
         img_bytes, width, height, provider_name = await generate_text_with_failover(
@@ -57,17 +61,11 @@ async def generate_text(
         logger.error("All providers failed for job %s: %s", request.job_id, err)
         raise HTTPException(status_code=503, detail=str(err)) from err
 
-    logger.info(
-        "generation done: job=%s provider=%s size=%dx%d bytes=%d",
-        request.job_id, provider_name, width, height, len(img_bytes),
-    )
+    _log(f"[ai-service] generation done: job={request.job_id} provider={provider_name} size={width}x{height} bytes={len(img_bytes)}")
 
     image_key = upload_to_s3(img_bytes, request.job_id, request.user_id)
 
-    logger.info(
-        "Text generation completed: job=%s provider=%s size=%dx%d key=%s",
-        request.job_id, provider_name, width, height, image_key,
-    )
+    _log(f"[ai-service] DONE: job={request.job_id} provider={provider_name} key={image_key}")
     return GenerateResponse(
         job_id=request.job_id,
         image_key=image_key,
