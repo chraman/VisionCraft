@@ -37,6 +37,21 @@ export default function GeneratePage() {
   const defaultTab: Tab = isTextEnabled ? 'text' : 'image';
   const [activeTab, setActiveTab] = useState<Tab>(defaultTab);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  function handleSubmitStart() {
+    setIsSubmitting(true);
+    setActiveJobId(null);
+  }
+
+  function handleJobStarted(jobId: string) {
+    setIsSubmitting(false);
+    setActiveJobId(jobId);
+  }
+
+  function handleSubmitError() {
+    setIsSubmitting(false);
+  }
 
   const creditsLeft = quota ? Math.max(0, quota.limit - quota.used) : null;
 
@@ -97,10 +112,18 @@ export default function GeneratePage() {
 
           {/* Form content */}
           {activeTab === 'text' && isTextEnabled && (
-            <TextPromptForm onJobStarted={setActiveJobId} />
+            <TextPromptForm
+              onJobStarted={handleJobStarted}
+              onSubmitStart={handleSubmitStart}
+              onSubmitError={handleSubmitError}
+            />
           )}
           {activeTab === 'image' && isImg2ImgEnabled && (
-            <ImageUploader onJobStarted={setActiveJobId} />
+            <ImageUploader
+              onJobStarted={handleJobStarted}
+              onSubmitStart={handleSubmitStart}
+              onSubmitError={handleSubmitError}
+            />
           )}
 
           {!isTextEnabled && !isImg2ImgEnabled && (
@@ -112,10 +135,10 @@ export default function GeneratePage() {
 
         {/* Right panel — result */}
         <div className="flex flex-1 flex-col overflow-auto bg-tint p-7">
-          <GenerationProgress jobId={activeJobId} />
+          <GenerationProgress jobId={activeJobId} isSubmitting={isSubmitting} />
           <ResultDisplay jobId={activeJobId} onClear={() => setActiveJobId(null)} />
 
-          {!activeJobId && (
+          {!isSubmitting && !activeJobId && (
             <div className="flex flex-1 flex-col items-center justify-center text-center">
               <svg
                 width={48}

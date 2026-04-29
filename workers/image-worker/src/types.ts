@@ -20,6 +20,9 @@ export interface JobStatusUpdate {
   cdnUrl?: string;
   provider?: string;
   model?: string;
+  prompt?: string;
+  aspectRatio?: string;
+  quality?: string;
   errorMessage?: string;
   startedAt?: string;
   completedAt?: string;

@@ -41,9 +41,15 @@ function SparkleIcon() {
 
 interface TextPromptFormProps {
   onJobStarted: (jobId: string) => void;
+  onSubmitStart?: () => void;
+  onSubmitError?: () => void;
 }
 
-export function TextPromptForm({ onJobStarted }: TextPromptFormProps) {
+export function TextPromptForm({
+  onJobStarted,
+  onSubmitStart,
+  onSubmitError,
+}: TextPromptFormProps) {
   const { mutation } = useTextGeneration();
   const [ar, setAr] = useState<AspectRatio>('1:1');
   const [quality, setQuality] = useState<ImageQuality>('standard');
@@ -61,9 +67,13 @@ export function TextPromptForm({ onJobStarted }: TextPromptFormProps) {
   const promptValue = watch('prompt') ?? '';
 
   function onSubmit(data: FormData) {
+    onSubmitStart?.();
     mutation.mutate(
       { ...data, aspectRatio: ar, quality },
-      { onSuccess: ({ jobId }) => onJobStarted(jobId) }
+      {
+        onSuccess: ({ jobId }) => onJobStarted(jobId),
+        onError: () => onSubmitError?.(),
+      }
     );
   }
 

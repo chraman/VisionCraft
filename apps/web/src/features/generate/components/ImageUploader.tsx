@@ -38,9 +38,11 @@ function SparkleIcon() {
 
 interface ImageUploaderProps {
   onJobStarted: (jobId: string) => void;
+  onSubmitStart?: () => void;
+  onSubmitError?: () => void;
 }
 
-export function ImageUploader({ onJobStarted }: ImageUploaderProps) {
+export function ImageUploader({ onJobStarted, onSubmitStart, onSubmitError }: ImageUploaderProps) {
   const [preview, setPreview] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [crop, setCrop] = useState<Crop>({ unit: '%', width: 100, height: 100, x: 0, y: 0 });
@@ -89,9 +91,13 @@ export function ImageUploader({ onJobStarted }: ImageUploaderProps) {
 
   function onSubmit(data: FormData) {
     if (!file) return;
+    onSubmitStart?.();
     mutation.mutate(
       { file, prompt: data.prompt, strength: data.strength },
-      { onSuccess: ({ jobId }) => onJobStarted(jobId) }
+      {
+        onSuccess: ({ jobId }) => onJobStarted(jobId),
+        onError: () => onSubmitError?.(),
+      }
     );
   }
 

@@ -1,8 +1,18 @@
+import { useState } from 'react';
+import type { AspectRatio } from '@ai-platform/types';
 import { useJobStatus } from '../hooks/useJobStatus';
 import { useImageActions } from '../../gallery/hooks/useImageActions';
 import { useQuota } from '../../profile/hooks/useQuota';
 import { track } from '../../../lib/analytics';
 import { useAuthStore } from '@ai-platform/store';
+
+const AR_CSS: Record<AspectRatio, string> = {
+  '1:1': '1/1',
+  '16:9': '16/9',
+  '9:16': '9/16',
+  '4:3': '4/3',
+  '3:4': '3/4',
+};
 
 interface ResultDisplayProps {
   jobId: string | null;
@@ -98,6 +108,7 @@ export function ResultDisplay({ jobId, onClear }: ResultDisplayProps) {
   const { saveMutation } = useImageActions();
   const { data: quota } = useQuota();
   const { user } = useAuthStore();
+  const [imgLoaded, setImgLoaded] = useState(false);
 
   if (!job) return null;
 
@@ -134,19 +145,12 @@ export function ResultDisplay({ jobId, onClear }: ResultDisplayProps) {
             </svg>
           </div>
           <div className="font-display text-[20px] font-medium tracking-[-0.3px]">
-            Provider briefly unavailable
+            Generation failed
           </div>
           <p className="max-w-[300px] text-[13px] leading-relaxed text-muted-foreground">
-            {job.errorMessage ??
-              "The AI provider returned an error. We'll retry automatically, or you can try again now."}
+            {job.errorMessage ?? 'The AI provider returned an error. Please try again.'}
           </p>
-          <div className="mt-1 flex gap-2">
-            <button
-              onClick={onClear}
-              className="rounded-lg border border-border bg-card px-4 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-muted"
-            >
-              View details
-            </button>
+          <div className="mt-1">
             <button
               onClick={onClear}
               className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
@@ -203,9 +207,21 @@ export function ResultDisplay({ jobId, onClear }: ResultDisplayProps) {
 
   // ── Success ───────────────────────────────────────────────────────────────
   if (job.status === 'COMPLETED' && job.imageId) {
-    // Prefer the CDN/MinIO URL delivered via SSE — avoids an extra round-trip
-    // through the gateway. Fall back to the API redirect route if unavailable.
     const imgSrc = job.cdnUrl ?? `/api/v1/images/${job.imageId}`;
+    const arCss = AR_CSS[(job.aspectRatio as AspectRatio) ?? '1:1'] ?? '1/1';
+
+    const durationMs =
+      job.startedAt && job.completedAt
+        ? new Date(job.completedAt).getTime() - new Date(job.startedAt).getTime()
+        : null;
+    const durationLabel = durationMs != null ? `${(durationMs / 1000).toFixed(1)}s` : null;
+
+    const metaParts = [
+      job.model,
+      job.aspectRatio,
+      job.quality === 'hd' ? 'HD' : 'Standard',
+      durationLabel,
+    ].filter(Boolean);
 
     return (
       <div>
@@ -215,7 +231,7 @@ export function ResultDisplay({ jobId, onClear }: ResultDisplayProps) {
             <div className="font-display text-[22px] font-medium tracking-[-0.4px]">
               Latest generation
             </div>
-            <div className="mt-0.5 text-[12px] text-muted-foreground">Completed · SDXL · HD</div>
+            <div className="mt-0.5 text-[12px] text-muted-foreground">{metaParts.join(' · ')}</div>
           </div>
           <div className="flex gap-2">
             <button
@@ -247,27 +263,53 @@ export function ResultDisplay({ jobId, onClear }: ResultDisplayProps) {
           </div>
         </div>
 
-        {/* Image */}
+        {/* Image with skeleton + fade-in reveal */}
         <div
-          className="mx-auto overflow-hidden rounded-2xl"
+          className="relative mx-auto overflow-hidden rounded-2xl bg-muted"
           style={{
             maxWidth: 600,
-            aspectRatio: '1/1',
+            aspectRatio: arCss,
             boxShadow: '0 20px 60px -20px rgba(40,30,80,.18)',
           }}
         >
-          <img src={imgSrc} alt={job.prompt} className="h-full w-full object-cover" />
+          {/* Skeleton shimmer shown until image loads */}
+          {!imgLoaded && (
+            <div
+              className="absolute inset-0"
+              style={{
+                background:
+                  'linear-gradient(90deg, hsl(var(--muted)) 0%, hsl(var(--vc-soft)) 50%, hsl(var(--muted)) 100%)',
+                backgroundSize: '200% 100%',
+                animation: 'shimmer 1.6s linear infinite',
+              }}
+            />
+          )}
+          <img
+            src={imgSrc}
+            alt={job.prompt}
+            className="h-full w-full object-cover"
+            style={{
+              opacity: imgLoaded ? 1 : 0,
+              transition: 'opacity 0.45s ease',
+            }}
+            onLoad={() => setImgLoaded(true)}
+          />
         </div>
 
-        {/* Success badge */}
+        {/* Success badge + metadata */}
         <div className="mx-auto mt-4 flex max-w-[600px] items-center justify-between text-[12px] text-muted-foreground">
           <span className="flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
             <CheckIcon /> Complete
           </span>
-          <span>
-            Seed: <span className="font-mono">{job.imageId?.slice(0, 8)}</span>
-          </span>
+          <span className="font-mono text-[11px]">{job.imageId?.slice(0, 8)}</span>
         </div>
+
+        <style>{`
+          @keyframes shimmer {
+            from { background-position: 200% 0; }
+            to { background-position: -200% 0; }
+          }
+        `}</style>
       </div>
     );
   }

@@ -32,6 +32,9 @@ async function processJob(job: Job<GenerationJobPayload>): Promise<void> {
     jobId,
     userId,
     status: 'PROCESSING',
+    prompt,
+    aspectRatio: job.data.aspectRatio,
+    quality: job.data.quality,
     startedAt: new Date().toISOString(),
   });
 
@@ -70,6 +73,9 @@ async function processJob(job: Job<GenerationJobPayload>): Promise<void> {
       cdnUrl: imageCdnUrl,
       provider: result.provider,
       model: result.model,
+      prompt,
+      aspectRatio: job.data.aspectRatio,
+      quality: job.data.quality,
       completedAt: new Date().toISOString(),
     });
 
