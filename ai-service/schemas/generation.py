@@ -28,3 +28,5 @@ class GenerateResponse(BaseModel):
     width: int
     height: int
     seed: int | None = None
+    augmented_prompt: str | None = None   # Set when ai.prompt_augmentation.enabled is ON
+    augmentation_ms: int | None = None    # Latency of the augmentation step

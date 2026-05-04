@@ -24,6 +24,15 @@ class Settings(BaseSettings):
     # Safety
     safety_enabled: bool = False
 
+    # Prompt Augmentation (Phase 1: Gemini LLM; Phase 2: + pgvector retrieval)
+    prompt_augmentation_enabled: bool = False
+    augmentation_model: str = "gemini-2.0-flash"
+    augmentation_timeout_seconds: float = 5.0
+    # Phase 2 — pgvector retrieval (leave blank for Phase 1)
+    augmentation_db_url: str = ""
+    augmentation_rag_enabled: bool = False
+    augmentation_rag_top_k: int = 3
+
     # App
     port: int = 8000
     service_name: str = "ai-service"

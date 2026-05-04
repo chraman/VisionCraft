@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from config.settings import settings
 from middleware.safety import safety_check
+from middleware.prompt_augmentation import augment_prompt, AugmentationResult
 from providers import BaseProvider, ProviderUnavailableError, build_active_providers
 from schemas.generation import GenerateImageRequest, GenerateResponse, GenerateTextRequest
 from services.generation import (
@@ -49,10 +50,25 @@ async def generate_text(
     await safety_check(prompt=request.prompt, image_bytes=None)
     _log(f"[ai-service] safety_check passed: job={request.job_id}")
 
+    augmentation_result: AugmentationResult | None = None
+    effective_prompt = request.prompt
+    if settings.prompt_augmentation_enabled:
+        augmentation_result = await augment_prompt(
+            prompt=request.prompt,
+            job_id=request.job_id,
+            user_id=request.user_id,
+        )
+        effective_prompt = augmentation_result.augmented_prompt
+        _log(
+            f"[ai-service] augmentation: job={request.job_id} "
+            f"was_augmented={augmentation_result.was_augmented} "
+            f"ms={augmentation_result.augmentation_ms}"
+        )
+
     try:
         img_bytes, width, height, provider_name = await generate_text_with_failover(
             providers,
-            prompt=request.prompt,
+            prompt=effective_prompt,
             negative_prompt=request.negative_prompt,
             aspect_ratio=request.aspect_ratio,
             quality=request.quality,
@@ -73,6 +89,12 @@ async def generate_text(
         model=request.model,
         width=width,
         height=height,
+        augmented_prompt=(
+            augmentation_result.augmented_prompt
+            if augmentation_result and augmentation_result.was_augmented
+            else None
+        ),
+        augmentation_ms=augmentation_result.augmentation_ms if augmentation_result else None,
     )
 
 

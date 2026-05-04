@@ -200,25 +200,26 @@ Examples:
 
 **Keep this table up to date.** Every new flag must be added here before code is written.
 
-| Flag key                         | Type    | v1 default | Phase      | Description                              |
-| -------------------------------- | ------- | ---------- | ---------- | ---------------------------------------- |
-| `image.text_generation.enabled`  | boolean | **ON**     | 1 — Stable | Core text-to-image generation            |
-| `image.img2img.enabled`          | boolean | **ON**     | 1 — Stable | Image-to-image generation                |
-| `image.batch_generation.enabled` | boolean | OFF        | 2          | Generate multiple images per request     |
-| `image.upscaling.enabled`        | boolean | OFF        | 2          | AI 4x super-resolution upscaling         |
-| `image.inpainting.enabled`       | boolean | OFF        | 3          | Edit image regions with canvas mask      |
-| `image.video_generation.enabled` | boolean | OFF        | 4          | Text/image to video generation           |
-| `ai.model_selector.enabled`      | boolean | OFF        | 2          | User chooses AI model from registry      |
-| `ai.style_presets.enabled`       | boolean | OFF        | 2          | One-click style preset buttons           |
-| `ai.safety_check.enabled`        | boolean | OFF        | 3          | Enable NSFW safety middleware in FastAPI |
-| `ui.dark_mode.enabled`           | boolean | OFF        | 2          | Dark theme toggle in settings            |
-| `ui.new_dashboard.enabled`       | string  | `control`  | 2          | A/B test — `control` or `variant_a`      |
-| `payments.stripe.enabled`        | boolean | OFF        | 2          | Stripe subscription checkout flow        |
-| `payments.credits.enabled`       | boolean | OFF        | 3          | Pay-per-generation credit system         |
-| `user.social_profiles.enabled`   | boolean | OFF        | 3          | Public gallery + profile page            |
-| `user.teams.enabled`             | boolean | OFF        | 3          | Team workspaces + shared collections     |
-| `user.api_access.enabled`        | boolean | OFF        | 3          | Developer API key management             |
-| `admin.dashboard.enabled`        | boolean | OFF        | 2          | Admin app — restricted to admin role     |
+| Flag key                         | Type    | v1 default | Phase      | Description                                     |
+| -------------------------------- | ------- | ---------- | ---------- | ----------------------------------------------- |
+| `image.text_generation.enabled`  | boolean | **ON**     | 1 — Stable | Core text-to-image generation                   |
+| `image.img2img.enabled`          | boolean | **ON**     | 1 — Stable | Image-to-image generation                       |
+| `image.batch_generation.enabled` | boolean | OFF        | 2          | Generate multiple images per request            |
+| `image.upscaling.enabled`        | boolean | OFF        | 2          | AI 4x super-resolution upscaling                |
+| `image.inpainting.enabled`       | boolean | OFF        | 3          | Edit image regions with canvas mask             |
+| `image.video_generation.enabled` | boolean | OFF        | 4          | Text/image to video generation                  |
+| `ai.model_selector.enabled`      | boolean | OFF        | 2          | User chooses AI model from registry             |
+| `ai.style_presets.enabled`       | boolean | OFF        | 2          | One-click style preset buttons                  |
+| `ai.safety_check.enabled`        | boolean | OFF        | 3          | Enable NSFW safety middleware in FastAPI        |
+| `ai.prompt_augmentation.enabled` | boolean | OFF        | 2          | Gemini-augment user prompt before provider call |
+| `ui.dark_mode.enabled`           | boolean | OFF        | 2          | Dark theme toggle in settings                   |
+| `ui.new_dashboard.enabled`       | string  | `control`  | 2          | A/B test — `control` or `variant_a`             |
+| `payments.stripe.enabled`        | boolean | OFF        | 2          | Stripe subscription checkout flow               |
+| `payments.credits.enabled`       | boolean | OFF        | 3          | Pay-per-generation credit system                |
+| `user.social_profiles.enabled`   | boolean | OFF        | 3          | Public gallery + profile page                   |
+| `user.teams.enabled`             | boolean | OFF        | 3          | Team workspaces + shared collections            |
+| `user.api_access.enabled`        | boolean | OFF        | 3          | Developer API key management                    |
+| `admin.dashboard.enabled`        | boolean | OFF        | 2          | Admin app — restricted to admin role            |
 
 ### 5.4 Using Flags — Frontend
 

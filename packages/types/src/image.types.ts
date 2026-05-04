@@ -49,6 +49,7 @@ export interface GenerationJob {
   metadata: Record<string, unknown> | null;
   createdAt: string;
   updatedAt: string;
+  augmented_prompt?: string | null;
 }
 
 export interface Collection {

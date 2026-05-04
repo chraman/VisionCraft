@@ -26,6 +26,7 @@ export interface JobStatusUpdate {
   errorMessage?: string;
   startedAt?: string;
   completedAt?: string;
+  augmented_prompt?: string;
 }
 
 export interface AiServiceResponse {
@@ -36,4 +37,5 @@ export interface AiServiceResponse {
   width: number;
   height: number;
   seed: number | null;
+  augmented_prompt?: string;
 }

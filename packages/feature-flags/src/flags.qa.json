@@ -8,6 +8,7 @@
   "ai.model_selector.enabled": true,
   "ai.style_presets.enabled": true,
   "ai.safety_check.enabled": false,
+  "ai.prompt_augmentation.enabled": false,
   "ui.dark_mode.enabled": true,
   "ui.new_dashboard.enabled": "variant_a",
   "payments.stripe.enabled": true,

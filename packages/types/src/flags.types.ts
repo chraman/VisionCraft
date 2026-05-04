@@ -17,6 +17,7 @@ export type FeatureFlagKey =
   | 'ai.model_selector.enabled'
   | 'ai.style_presets.enabled'
   | 'ai.safety_check.enabled'
+  | 'ai.prompt_augmentation.enabled'
   // UI
   | 'ui.dark_mode.enabled'
   | 'ui.new_dashboard.enabled'

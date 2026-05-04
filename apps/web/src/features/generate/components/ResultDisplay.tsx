@@ -304,6 +304,16 @@ export function ResultDisplay({ jobId, onClear }: ResultDisplayProps) {
           <span className="font-mono text-[11px]">{job.imageId?.slice(0, 8)}</span>
         </div>
 
+        {/* Enhanced prompt — only shown when Gemini augmented the prompt */}
+        {job.augmented_prompt && (
+          <div className="mx-auto mt-3 max-w-[600px] rounded-lg border border-border bg-muted/40 px-3.5 py-2.5">
+            <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Enhanced prompt
+            </p>
+            <p className="text-[12px] leading-relaxed text-foreground">{job.augmented_prompt}</p>
+          </div>
+        )}
+
         <style>{`
           @keyframes shimmer {
             from { background-position: 200% 0; }

@@ -77,6 +77,7 @@ async function processJob(job: Job<GenerationJobPayload>): Promise<void> {
       aspectRatio: job.data.aspectRatio,
       quality: job.data.quality,
       completedAt: new Date().toISOString(),
+      augmented_prompt: result.augmented_prompt,
     });
 
     logger.info('Job completed', {
