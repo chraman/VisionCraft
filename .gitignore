@@ -59,3 +59,18 @@ npm-debug.log*
 
 # TypeScript build info
 *.tsbuildinfo
+
+# Keys / secrets
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfplan
+
+# Claude Code
+.claude/scheduled_tasks.lock
