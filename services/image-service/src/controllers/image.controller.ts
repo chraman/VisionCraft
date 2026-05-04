@@ -200,7 +200,7 @@ export const imageController = {
       return;
     }
     const result = await imageService.listSavedImages(userId, parsed.data);
-    res.json({ success: true, ...result, requestId: requestId(res) });
+    res.json({ success: true, data: result, requestId: requestId(res) });
   },
 
   async saveImage(req: Request, res: Response): Promise<void> {
