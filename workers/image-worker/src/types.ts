@@ -7,7 +7,7 @@ export interface GenerationJobPayload {
   model: string;
   aspectRatio: string;
   quality: string;
-  imageUrl?: string; // IMG2IMG — S3 key in uploads bucket
+  imageUrls?: string[]; // IMG2IMG — S3 keys in uploads bucket
   strength?: number; // IMG2IMG
 }
 

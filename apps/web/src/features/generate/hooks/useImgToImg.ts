@@ -11,7 +11,7 @@ import { track } from '../../../lib/analytics';
 import { useAuthStore } from '@ai-platform/store';
 
 export interface ImgToImgRequest {
-  file: File;
+  files: File[];
   prompt: string;
   strength?: number;
   model?: string;
@@ -23,11 +23,17 @@ export function useImgToImg() {
 
   const mutation = useMutation({
     mutationFn: async (req: ImgToImgRequest) => {
-      const { uploadUrl, key } = await getPresignedUploadUrl(req.file.name, req.file.type);
-      await uploadFileToS3(uploadUrl, req.file);
+      // Upload all reference images to S3 in parallel
+      const keys = await Promise.all(
+        req.files.map(async (file) => {
+          const { uploadUrl, key } = await getPresignedUploadUrl(file.name, file.type);
+          await uploadFileToS3(uploadUrl, file);
+          return key;
+        })
+      );
 
       return generateFromImage({
-        imageUrl: key,
+        imageUrls: keys,
         prompt: req.prompt,
         strength: req.strength,
         model: req.model,

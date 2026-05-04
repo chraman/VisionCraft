@@ -9,7 +9,10 @@ export const generateTextSchema = z.object({
 });
 
 export const generateImageSchema = z.object({
-  imageUrl: z.string().min(1, 'Image URL or key is required'),
+  imageUrls: z
+    .array(z.string().min(1))
+    .min(1, 'At least one image is required')
+    .max(4, 'Maximum 4 reference images allowed'),
   prompt: z.string().min(3, 'Prompt must be at least 3 characters').max(2000),
   strength: z.number().min(0.1).max(1.0).optional().default(0.75),
   model: z.string().optional().default('sdxl'),

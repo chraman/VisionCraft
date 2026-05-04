@@ -77,7 +77,7 @@ export const imageService = {
       model: input.model ?? 'sdxl',
       aspectRatio: '1:1',
       quality: 'standard',
-      metadata: { imageUrl: input.imageUrl, strength: input.strength ?? 0.75 },
+      metadata: { imageUrls: input.imageUrls, strength: input.strength ?? 0.75 },
     });
 
     const payload = {
@@ -88,7 +88,7 @@ export const imageService = {
       model: input.model ?? 'sdxl',
       aspectRatio: '1:1',
       quality: 'standard',
-      imageUrl: input.imageUrl,
+      imageUrls: input.imageUrls,
       strength: input.strength ?? 0.75,
     };
 

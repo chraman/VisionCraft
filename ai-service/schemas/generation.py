@@ -14,7 +14,7 @@ class GenerateTextRequest(BaseModel):
 class GenerateImageRequest(BaseModel):
     job_id: str
     user_id: str
-    image_url: str  # S3 key from uploads bucket
+    image_urls: list[str]  # S3 keys from uploads bucket — min 1, max 4; first is primary
     prompt: str
     strength: float = Field(default=0.75, ge=0.1, le=1.0)
     model: str = "sdxl"

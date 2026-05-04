@@ -127,6 +127,102 @@ async def _call_gemini(prompt: str, examples: list[str], model_name: str) -> str
     return text
 
 
+IMG2IMG_SYSTEM_PROMPT = """You are a Stable Diffusion / DALL-E img2img prompt engineer.
+The user provides reference image(s) and a transformation prompt.
+Images are labeled [image1], [image2], etc. in the prompt.
+
+Rewrite the transformation prompt to be more detailed and effective by:
+1. Clarifying what visual elements to extract from each referenced image
+2. Adding quality modifiers: masterpiece, ultra-detailed, sharp focus, 8k uhd
+3. Adding relevant style, lighting, and rendering terms
+4. Preserving ALL [imageN] references exactly as written
+
+Rules:
+- Output ONLY the enhanced prompt. No explanation, no preamble.
+- Total output must not exceed 400 words.
+- Do not duplicate modifiers already present in the original prompt."""
+
+
+async def augment_prompt_img2img(
+    prompt: str,
+    image_bytes_list: list[bytes],
+    job_id: str,
+    user_id: str,
+) -> AugmentationResult:
+    """Multi-modal img2img augmentation — passes all reference images to Gemini."""
+    from config.settings import settings
+
+    if not settings.prompt_augmentation_enabled:
+        return AugmentationResult(
+            augmented_prompt=prompt,
+            original_prompt=prompt,
+            was_augmented=False,
+            augmentation_ms=0,
+        )
+
+    start = time.monotonic()
+    try:
+        augmented = await asyncio.wait_for(
+            _call_gemini_multimodal(prompt, image_bytes_list, settings.augmentation_model),
+            timeout=settings.augmentation_timeout_seconds,
+        )
+        elapsed = int((time.monotonic() - start) * 1000)
+        logger.info(
+            "img2img augmentation: job=%s user=%s images=%d ms=%d preview=%.100s",
+            job_id, user_id, len(image_bytes_list), elapsed, prompt,
+        )
+        return AugmentationResult(
+            augmented_prompt=augmented,
+            original_prompt=prompt,
+            was_augmented=True,
+            augmentation_ms=elapsed,
+        )
+    except Exception as err:
+        elapsed = int((time.monotonic() - start) * 1000)
+        logger.warning(
+            "img2img augmentation failed, using original: job=%s error=%s",
+            job_id, str(err)[:200],
+        )
+        return AugmentationResult(
+            augmented_prompt=prompt,
+            original_prompt=prompt,
+            was_augmented=False,
+            augmentation_ms=elapsed,
+        )
+
+
+async def _call_gemini_multimodal(
+    prompt: str,
+    image_bytes_list: list[bytes],
+    model_name: str,
+) -> str:
+    import io
+    import PIL.Image
+    import google.generativeai as genai  # type: ignore[import]
+    from config.settings import settings
+
+    genai.configure(api_key=settings.gemini_api_key)
+    model = genai.GenerativeModel(
+        model_name,
+        system_instruction=IMG2IMG_SYSTEM_PROMPT,
+    )
+
+    pil_images = [PIL.Image.open(io.BytesIO(b)) for b in image_bytes_list]
+    parts: list = [
+        f"Enhance this img2img prompt ({len(pil_images)} reference image(s) attached):\n{prompt[:2000]}",
+        *pil_images,
+    ]
+
+    response = await model.generate_content_async(
+        parts,
+        generation_config={"max_output_tokens": 500, "temperature": 0.7},
+    )
+    text = response.text.strip()
+    if not text:
+        raise ValueError("Gemini returned an empty img2img augmentation response")
+    return text
+
+
 async def _retrieve_similar_examples(prompt: str) -> list[str]:
     """Phase 2: embed prompt → cosine search prompt_embeddings → return modifier texts."""
     from config.settings import settings

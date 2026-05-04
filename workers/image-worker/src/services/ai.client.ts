@@ -65,7 +65,7 @@ export async function callAiServiceImage(
   const body = {
     job_id: payload.jobId,
     user_id: payload.userId,
-    image_url: payload.imageUrl,
+    image_urls: payload.imageUrls,
     prompt: payload.prompt,
     strength: payload.strength ?? 0.75,
     model: payload.model,

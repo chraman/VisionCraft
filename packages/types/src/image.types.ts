@@ -80,7 +80,7 @@ export interface GenerateTextRequest {
 }
 
 export interface GenerateImageRequest {
-  imageUrl: string;
+  imageUrls: string[];
   prompt: string;
   strength?: number;
   model?: string;

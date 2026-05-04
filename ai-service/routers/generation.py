@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from config.settings import settings
 from middleware.safety import safety_check
-from middleware.prompt_augmentation import augment_prompt, AugmentationResult
+from middleware.prompt_augmentation import augment_prompt, augment_prompt_img2img, AugmentationResult
 from providers import BaseProvider, ProviderUnavailableError, build_active_providers
 from schemas.generation import GenerateImageRequest, GenerateResponse, GenerateTextRequest
 from services.generation import (
@@ -103,15 +103,42 @@ async def generate_image(
     request: GenerateImageRequest,
     providers: Annotated[list[BaseProvider], Depends(get_providers)],
 ) -> GenerateResponse:
-    source_bytes = await _fetch_source_image(request.image_url)
+    import asyncio as _asyncio
 
-    await safety_check(prompt=request.prompt, image_bytes=source_bytes)
+    _log(
+        f"[ai-service] generate_image: job={request.job_id} user={request.user_id} "
+        f"images={len(request.image_urls)} model={request.model}"
+    )
+
+    # Fetch all reference images from S3 in parallel; primary is image_urls[0]
+    source_bytes_list: list[bytes] = list(
+        await _asyncio.gather(*[_fetch_source_image(url) for url in request.image_urls])
+    )
+
+    await safety_check(prompt=request.prompt, image_bytes=source_bytes_list[0])
+    _log(f"[ai-service] safety_check passed: job={request.job_id}")
+
+    augmentation_result: AugmentationResult | None = None
+    effective_prompt = request.prompt
+    if settings.prompt_augmentation_enabled:
+        augmentation_result = await augment_prompt_img2img(
+            prompt=request.prompt,
+            image_bytes_list=source_bytes_list,
+            job_id=request.job_id,
+            user_id=request.user_id,
+        )
+        effective_prompt = augmentation_result.augmented_prompt
+        _log(
+            f"[ai-service] img2img augmentation: job={request.job_id} "
+            f"was_augmented={augmentation_result.was_augmented} "
+            f"ms={augmentation_result.augmentation_ms}"
+        )
 
     try:
         img_bytes, width, height, provider_name = await generate_image_with_failover(
             providers,
-            image_bytes=source_bytes,
-            prompt=request.prompt,
+            image_bytes=source_bytes_list[0],
+            prompt=effective_prompt,
             strength=request.strength,
             aspect_ratio="1:1",
         )
@@ -121,10 +148,7 @@ async def generate_image(
 
     image_key = upload_to_s3(img_bytes, request.job_id, request.user_id)
 
-    logger.info(
-        "Image generation completed: job=%s provider=%s size=%dx%d",
-        request.job_id, provider_name, width, height,
-    )
+    _log(f"[ai-service] img2img DONE: job={request.job_id} provider={provider_name} size={width}x{height}")
     return GenerateResponse(
         job_id=request.job_id,
         image_key=image_key,
@@ -132,6 +156,12 @@ async def generate_image(
         model=request.model,
         width=width,
         height=height,
+        augmented_prompt=(
+            augmentation_result.augmented_prompt
+            if augmentation_result and augmentation_result.was_augmented
+            else None
+        ),
+        augmentation_ms=augmentation_result.augmentation_ms if augmentation_result else None,
     )
 
 

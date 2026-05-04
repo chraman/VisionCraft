@@ -59,7 +59,7 @@ logger = logging.getLogger("KaggleServer")
 user_secrets = UserSecretsClient()
 os.environ["HF_TOKEN"] = user_secrets.get_secret("HF_TOKEN")
 
-NGROK_TOKEN  = "37vraVxV1TunmyLhSBA7H7ryytC_2U3FfH5E2t4oyrijUUCwX"
+NGROK_TOKEN  = user_secrets.get_secret("NGROK_TOKEN")
 MODEL_ID     = "black-forest-labs/FLUX.2-klein-4B"
 PORT         = 8000
 
@@ -202,19 +202,30 @@ async def generate_text(request: Request) -> Response:
 
 @app.post("/generate/image")
 async def generate_image(
-    image:    UploadFile = File(...),
-    prompt:   str        = Form(...),
-    strength: float      = Form(0.75),
+    image:    UploadFile        = File(...),
+    image2:   UploadFile | None = File(None),
+    image3:   UploadFile | None = File(None),
+    image4:   UploadFile | None = File(None),
+    prompt:   str               = Form(...),
+    strength: float             = Form(0.75),
 ) -> Response:
     """
     Multipart fields:
-      image     file    Source image (PNG/JPEG)
-      prompt    string  Generation prompt
+      image     file    Primary source image (PNG/JPEG) — sets output dimensions
+      image2-4  file    Additional reference images (optional, accepted for API
+                        consistency with multi-image img2img; not used for FLUX.2
+                        generation since the Gemini-augmented prompt already
+                        encodes their visual context)
+      prompt    string  Generation prompt (may contain [image1], [image2] refs)
       strength  float   0.0-1.0 — how much to change the source (default 0.75)
     Returns: PNG bytes
     """
     if not models.get("pipe"):
         return Response(status_code=503, content="Model not loaded.")
+
+    extras = [f for f in [image2, image3, image4] if f is not None]
+    if extras:
+        logger.info(f"Multi-image img2img: {1 + len(extras)} reference(s); using primary image only for FLUX.2 generation.")
 
     try:
         # Load and normalize source image
