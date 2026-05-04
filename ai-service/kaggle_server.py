@@ -40,6 +40,7 @@ print("Dependencies installed.")
 
 # ─── Imports ──────────────────────────────────────────────────────────────────
 import os, io, gc, torch, asyncio, logging, threading, nest_asyncio
+import numpy as np
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -127,9 +128,20 @@ async def lifespan(app: FastAPI):
         pipe.vae.enable_tiling()
         models["pipe"] = pipe
 
-        # Flux2KleinPipeline uses a single text encoder — FluxImg2ImgPipeline
-        # requires text_encoder_2/tokenizer_2 which klein doesn't have, so we
-        # skip it and handle img2img via the text2img pipeline directly.
+        # Try to load a true img2img pipeline by reusing the already-loaded
+        # transformer/VAE/tokenizer — from_pipe() shares weights so no extra VRAM.
+        # Flux2KleinPipeline uses a single T5 encoder; FluxImg2ImgPipeline may
+        # expect both T5 + CLIP. We attempt it and fall back gracefully.
+        try:
+            from diffusers import FluxImg2ImgPipeline
+            img2img_pipe = FluxImg2ImgPipeline.from_pipe(pipe)
+            models["img2img"] = img2img_pipe
+            logger.info("🖼️  FluxImg2ImgPipeline loaded — true img2img enabled.")
+        except Exception as ex:
+            logger.warning(
+                "⚠️  FluxImg2ImgPipeline not compatible with this checkpoint (%s); "
+                "img2img will use pixel-blend fallback.", ex
+            )
 
         logger.info("🚀 FLUX.2 [klein] server ready.")
 
@@ -239,19 +251,50 @@ async def generate_image(
         )
         source_img = resize_for_flux(source_img, target_w, target_h)
 
-        # Flux2KleinPipeline has no native img2img — generate at source dimensions
-        steps = max(4, round(8 * strength))
-        logger.info(f"Img2img (text2img) | prompt={prompt[:60]!r} | {target_w}x{target_h} | steps={steps}")
-        with torch.inference_mode():
-            result = models["pipe"](
-                prompt=prompt,
-                width=target_w,
-                height=target_h,
-                num_inference_steps=steps,
-                guidance_scale=1.0,
-            )
+        img2img_pipe = models.get("img2img")
 
-        return png_response(result.images[0])
+        if img2img_pipe:
+            # True FLUX img2img — source image conditions the denoising process
+            steps = max(4, round(10 * strength))
+            logger.info(
+                f"Img2img (FLUX native) | prompt={prompt[:60]!r} | "
+                f"strength={strength:.2f} | {target_w}x{target_h} | steps={steps}"
+            )
+            with torch.inference_mode():
+                result = img2img_pipe(
+                    prompt=prompt,
+                    image=source_img,
+                    strength=strength,
+                    num_inference_steps=steps,
+                    guidance_scale=1.0,
+                )
+            out_img = result.images[0]
+
+        else:
+            # Blend fallback: run text2img at source dimensions, then composite
+            # generated pixels with source pixels weighted by strength.
+            # strength=1.0 → fully generated; strength=0.1 → mostly original.
+            steps = max(4, round(8 * strength))
+            logger.info(
+                f"Img2img (blend) | prompt={prompt[:60]!r} | "
+                f"strength={strength:.2f} | {target_w}x{target_h} | steps={steps}"
+            )
+            with torch.inference_mode():
+                result = models["pipe"](
+                    prompt=prompt,
+                    width=target_w,
+                    height=target_h,
+                    num_inference_steps=steps,
+                    guidance_scale=1.0,
+                )
+            gen_arr = np.array(result.images[0]).astype(float)
+            src_arr = np.array(source_img).astype(float)
+            blended = np.clip(
+                strength * gen_arr + (1.0 - strength) * src_arr, 0, 255
+            ).astype(np.uint8)
+            out_img = Image.fromarray(blended)
+
+        return png_response(out_img)
 
     except Exception as e:
         logger.error(f"❌ Img2img error: {e}", exc_info=True)
