@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { AspectRatio } from '@ai-platform/types';
 import { useJobStatus } from '../hooks/useJobStatus';
 import { useImageActions } from '../../gallery/hooks/useImageActions';
@@ -17,6 +17,7 @@ const AR_CSS: Record<AspectRatio, string> = {
 interface ResultDisplayProps {
   jobId: string | null;
   onClear: () => void;
+  onRegenerate?: (params: { prompt: string; aspectRatio: string; quality: string }) => void;
 }
 
 function RefreshIcon() {
@@ -103,12 +104,17 @@ function WarnIcon() {
   );
 }
 
-export function ResultDisplay({ jobId, onClear }: ResultDisplayProps) {
+export function ResultDisplay({ jobId, onClear, onRegenerate }: ResultDisplayProps) {
   const { data: job } = useJobStatus(jobId);
   const { saveMutation } = useImageActions();
   const { data: quota } = useQuota();
   const { user } = useAuthStore();
   const [imgLoaded, setImgLoaded] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setSaved(false);
+  }, [jobId]);
 
   if (!job) return null;
 
@@ -233,33 +239,62 @@ export function ResultDisplay({ jobId, onClear }: ResultDisplayProps) {
             </div>
             <div className="mt-0.5 text-[12px] text-muted-foreground">{metaParts.join(' · ')}</div>
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={onClear}
-              className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-[7px] text-[12.5px] font-medium text-foreground transition-colors hover:bg-muted"
-            >
-              <RefreshIcon /> Regenerate
-            </button>
-            <a
-              href={imgSrc}
-              download
-              className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-[7px] text-[12.5px] font-medium text-foreground transition-colors hover:bg-muted"
-            >
-              <DownloadIcon /> Download
-            </a>
-            <button
-              onClick={() => saveMutation.mutate(job.imageId!)}
-              disabled={saveMutation.isPending}
-              className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-[7px] text-[12.5px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
-            >
-              {saveMutation.isPending ? (
-                'Saving…'
-              ) : (
-                <>
-                  <SaveIcon /> Save to gallery
-                </>
-              )}
-            </button>
+          <div className="flex flex-col items-end gap-1.5">
+            <div className="flex gap-2">
+              <button
+                onClick={() =>
+                  onRegenerate
+                    ? onRegenerate({
+                        prompt: job.prompt,
+                        aspectRatio: job.aspectRatio,
+                        quality: job.quality,
+                      })
+                    : onClear()
+                }
+                className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-[7px] text-[12.5px] font-medium text-foreground transition-colors hover:bg-muted"
+              >
+                <RefreshIcon /> Regenerate
+              </button>
+              <a
+                href={imgSrc}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-[7px] text-[12.5px] font-medium text-foreground transition-colors hover:bg-muted"
+              >
+                <DownloadIcon /> Open
+              </a>
+              <button
+                onClick={() =>
+                  saveMutation.mutate(job.imageId!, { onSuccess: () => setSaved(true) })
+                }
+                disabled={saveMutation.isPending || saved}
+                className={
+                  saved
+                    ? 'flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-[7px] text-[12.5px] font-medium text-white'
+                    : 'flex items-center gap-1.5 rounded-lg bg-primary px-3 py-[7px] text-[12.5px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60'
+                }
+              >
+                {saveMutation.isPending ? (
+                  'Saving…'
+                ) : saved ? (
+                  <>
+                    <CheckIcon /> Saved
+                  </>
+                ) : (
+                  <>
+                    <SaveIcon /> Save to gallery
+                  </>
+                )}
+              </button>
+            </div>
+            {saved && (
+              <a
+                href="/gallery"
+                className="text-[11.5px] text-primary underline underline-offset-2"
+              >
+                View in gallery →
+              </a>
+            )}
           </div>
         </div>
 

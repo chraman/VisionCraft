@@ -1,6 +1,9 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useFlag } from '@ai-platform/feature-flags';
+import type { AspectRatio, ImageQuality } from '@ai-platform/types';
 import { useQuota } from '../../profile/hooks/useQuota';
+import { generateFromText } from '../../../services/image.service';
 import { TextPromptForm } from '../components/TextPromptForm';
 import { ImageUploader } from '../components/ImageUploader';
 import { GenerationProgress } from '../components/GenerationProgress';
@@ -51,6 +54,25 @@ export default function GeneratePage() {
 
   function handleSubmitError() {
     setIsSubmitting(false);
+  }
+
+  async function handleRegenerate(params: {
+    prompt: string;
+    aspectRatio: string;
+    quality: string;
+  }) {
+    handleSubmitStart();
+    try {
+      const { jobId } = await generateFromText({
+        prompt: params.prompt,
+        aspectRatio: params.aspectRatio as AspectRatio,
+        quality: params.quality as ImageQuality,
+      });
+      handleJobStarted(jobId);
+    } catch (err) {
+      handleSubmitError();
+      toast.error(err instanceof Error ? err.message : 'Generation failed');
+    }
   }
 
   const creditsLeft = quota ? Math.max(0, quota.limit - quota.used) : null;
@@ -136,7 +158,11 @@ export default function GeneratePage() {
         {/* Right panel — result */}
         <div className="flex flex-1 flex-col overflow-auto bg-tint p-7">
           <GenerationProgress jobId={activeJobId} isSubmitting={isSubmitting} />
-          <ResultDisplay jobId={activeJobId} onClear={() => setActiveJobId(null)} />
+          <ResultDisplay
+            jobId={activeJobId}
+            onClear={() => setActiveJobId(null)}
+            onRegenerate={handleRegenerate}
+          />
 
           {!isSubmitting && !activeJobId && (
             <div className="flex flex-1 flex-col items-center justify-center text-center">
