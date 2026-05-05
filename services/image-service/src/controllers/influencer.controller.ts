@@ -3,6 +3,7 @@ import { createLogger } from '@ai-platform/utils';
 import { AppError } from '@ai-platform/types';
 import { influencerService } from '../services/influencer.service';
 import {
+  previewInfluencerSchema,
   createInfluencerSchema,
   generateInfluencerSchema,
   listInfluencersSchema,
@@ -25,6 +26,25 @@ function reqId(res: Response): string {
 }
 
 export const influencerController = {
+  async preview(req: Request, res: Response): Promise<void> {
+    const userId = getUserId(req);
+    const parsed = previewInfluencerSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: parsed.error.issues[0]?.message ?? 'Invalid input',
+        },
+        requestId: reqId(res),
+      });
+      return;
+    }
+    logger.info('Previewing influencer', { action: 'influencer_preview', userId });
+    const result = await influencerService.previewInfluencer(userId, parsed.data);
+    res.json({ success: true, data: result, requestId: reqId(res) });
+  },
+
   async create(req: Request, res: Response): Promise<void> {
     const userId = getUserId(req);
     const tier = getTier(req);

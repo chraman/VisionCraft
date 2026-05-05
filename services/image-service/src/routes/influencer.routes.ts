@@ -9,9 +9,18 @@ influencerRouter.use(requireFlag('image.influencer.enabled'));
 
 /**
  * @openapi
+ * /api/v1/influencers/preview:
+ *   post:
+ *     summary: Extract character DNA and generate a profile image preview (does not persist)
+ *     tags: [Influencers]
+ */
+influencerRouter.post('/preview', asyncHandler(influencerController.preview));
+
+/**
+ * @openapi
  * /api/v1/influencers:
  *   post:
- *     summary: Create a new influencer profile (extracts character DNA via Gemini)
+ *     summary: Save a confirmed influencer profile (requires pre-extracted DNA + profile image)
  *     tags: [Influencers]
  *   get:
  *     summary: List user's influencer profiles (cursor-paginated)

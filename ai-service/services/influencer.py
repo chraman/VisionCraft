@@ -5,6 +5,7 @@ DNA extraction uses Gemini vision (source image) or Gemini text (description).
 Raises ValueError on bad JSON/missing fields; RuntimeError on timeout.
 """
 import asyncio
+import hashlib
 import json
 import logging
 import time
@@ -16,6 +17,7 @@ _DNA_SYSTEM_PROMPT = """You are a character DNA extractor for AI image generatio
 Analyze the provided source (image or text description) and return a JSON object with this exact shape:
 
 {
+  "face_anchor": "<one-sentence precise face description: skin tone, face shape, eye color/shape, nose, lips, any distinctive features — 15-25 words>",
   "immutable": {
     "facial_topology": "<face shape, symmetry, e.g. 'oval face, high symmetry, wide-set eyes'>",
     "skin_texture": "<undertone and texture, e.g. 'warm olive undertone, smooth, low pore visibility'>",
@@ -30,13 +32,15 @@ Analyze the provided source (image or text description) and return a JSON object
 
 Rules:
 - Output ONLY valid JSON. No markdown fences, no explanation, no extra keys.
-- All values must be single strings (comma-separated descriptors, 8-20 words each).
+- face_anchor: a single sentence of 15-25 words capturing the most precise visual identity markers.
+- All other values must be single strings (comma-separated descriptors, 8-20 words each).
 - Immutable = permanent physical traits. Dynamic = context-dependent style choices."""
 
 
 async def extract_character_dna(
     source_image_url: str | None,
     description: str | None,
+    name: str = "",
     model_name: str = "gemini-2.0-flash",
     timeout_seconds: float = 15.0,
 ) -> dict:
@@ -114,6 +118,8 @@ async def extract_character_dna(
             raise ValueError(f"Missing immutable DNA fields: {missing_imm}")
         if missing_dyn:
             raise ValueError(f"Missing dynamic DNA fields: {missing_dyn}")
+        if not dna_dict.get("face_anchor"):
+            raise ValueError("Missing face_anchor field in DNA extraction")
 
         imm = dna_dict["immutable"]
         dna_dict["anchoring_prefix"] = (
@@ -122,6 +128,9 @@ async def extract_character_dna(
         )
         dna_dict["extracted_at"] = datetime.now(timezone.utc).isoformat()
         dna_dict["extraction_model"] = model_name
+        # Deterministic seed from influencer name — same persona starts from the same latent space
+        seed_input = name if name else dna_dict.get("face_anchor", "default")
+        dna_dict["seed"] = int(hashlib.sha256(seed_input.encode()).hexdigest()[:8], 16) % (2 ** 32)
 
         logger.info(
             "DNA extracted: model=%s ms=%d prefix_len=%d",
@@ -147,7 +156,10 @@ def build_anchored_prompt(
     Structure: {anchoring_prefix}{target_prompt}[, {emotion_modifier}]
                [, {wardrobe}][, {lighting}][, {scene_params}]
     """
-    parts = [dna["anchoring_prefix"], target_prompt.strip()]
+    parts = []
+    if dna.get("face_anchor"):
+        parts.append(dna["face_anchor"])
+    parts += [dna["anchoring_prefix"], target_prompt.strip()]
 
     if emotion_modifier:
         parts.append(emotion_modifier.strip())

@@ -4,48 +4,48 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { getPresignedUploadUrl, uploadFileToS3 } from '../../../services/image.service';
-import { useCreateInfluencer } from '../hooks/useCreateInfluencer';
-import type { CharacterDna, Influencer } from '@ai-platform/types';
+import { usePreviewInfluencer, useCreateInfluencer } from '../hooks/useCreateInfluencer';
+import type { Influencer, PreviewInfluencerResponse } from '@ai-platform/types';
 
-const schema = z
-  .object({
-    name: z.string().min(1, 'Name is required').max(100),
-    description: z.string().max(500).optional(),
-    descriptionText: z.string().max(2000).optional(),
-  })
-  .refine((d) => d.descriptionText || true, {
-    message: 'Provide a description or upload an image',
-  });
+const schema = z.object({
+  name: z.string().min(1, 'Name is required').max(100),
+  description: z.string().max(500).optional(),
+  descriptionText: z.string().max(2000).optional(),
+});
 
 type FormValues = z.infer<typeof schema>;
+type Step = 'form' | 'preview';
 
 interface Props {
   onCreated: (influencer: Influencer) => void;
 }
 
 export function CreateInfluencerForm({ onCreated }: Props) {
+  const [step, setStep] = useState<Step>('form');
   const [sourceFile, setSourceFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
+  const [sourceImageUrl, setSourceImageUrl] = useState<string | undefined>();
+  const [filePreview, setFilePreview] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [extractedDna, setExtractedDna] = useState<CharacterDna | null>(null);
+  const [previewData, setPreviewData] = useState<PreviewInfluencerResponse | null>(null);
+  const [formSnapshot, setFormSnapshot] = useState<FormValues | null>(null);
 
   const {
     register,
     handleSubmit,
     formState: { errors },
     watch,
-  } = useForm<FormValues>({
-    resolver: zodResolver(schema),
-  });
+    reset,
+  } = useForm<FormValues>({ resolver: zodResolver(schema) });
 
-  const mutation = useCreateInfluencer();
+  const previewMutation = usePreviewInfluencer();
+  const saveMutation = useCreateInfluencer();
   const descriptionText = watch('descriptionText');
 
   const onDrop = useCallback((accepted: File[]) => {
     const file = accepted[0];
     if (!file) return;
     setSourceFile(file);
-    setPreview(URL.createObjectURL(file));
+    setFilePreview(URL.createObjectURL(file));
   }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -56,41 +56,119 @@ export function CreateInfluencerForm({ onCreated }: Props) {
   });
 
   async function onSubmit(values: FormValues) {
-    if (!sourceFile && !values.descriptionText) {
-      return;
-    }
+    if (!sourceFile && !values.descriptionText) return;
 
-    let sourceImageUrl: string | undefined;
+    let uploadedKey: string | undefined;
 
     if (sourceFile) {
       setIsUploading(true);
       try {
         const { uploadUrl, key } = await getPresignedUploadUrl(sourceFile.name, sourceFile.type);
         await uploadFileToS3(uploadUrl, sourceFile);
-        sourceImageUrl = key;
+        uploadedKey = key;
+        setSourceImageUrl(key);
       } finally {
         setIsUploading(false);
       }
     }
 
-    mutation.mutate(
+    setFormSnapshot(values);
+    previewMutation.mutate(
       {
         name: values.name,
         description: values.description,
-        sourceImageUrl,
+        sourceImageUrl: uploadedKey,
         descriptionText: values.descriptionText,
       },
       {
-        onSuccess: (influencer) => {
-          setExtractedDna(influencer.characterDna);
-          onCreated(influencer);
+        onSuccess: (data) => {
+          setPreviewData(data);
+          setStep('preview');
         },
       }
     );
   }
 
-  const isLoading = isUploading || mutation.isPending;
+  function handleSave() {
+    if (!previewData || !formSnapshot) return;
+    saveMutation.mutate(
+      {
+        name: formSnapshot.name,
+        description: formSnapshot.description,
+        sourceImageUrl,
+        characterDna: previewData.characterDna as Record<string, unknown>,
+        profileImageUrl: previewData.profileImageUrl,
+      },
+      {
+        onSuccess: (influencer) => onCreated(influencer),
+      }
+    );
+  }
 
+  function handleStartOver() {
+    setStep('form');
+    setPreviewData(null);
+    setFormSnapshot(null);
+    setSourceFile(null);
+    setFilePreview(null);
+    setSourceImageUrl(undefined);
+    reset();
+  }
+
+  const isLoading = isUploading || previewMutation.isPending;
+
+  // ── Step 2: Preview ───────────────────────────────────────────────────────────
+  if (step === 'preview' && previewData) {
+    return (
+      <div className="flex flex-col gap-5">
+        <div>
+          <h3 className="text-[14px] font-semibold text-foreground">Profile image generated</h3>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">
+            This image will be used as the identity reference for all future generations.
+          </p>
+        </div>
+
+        <div className="overflow-hidden rounded-[10px] border border-border">
+          <img
+            src={previewData.profileImageUrl}
+            alt="Generated profile"
+            className="w-full object-cover"
+            style={{ maxHeight: 420 }}
+          />
+        </div>
+
+        <div className="text-[12px] font-semibold text-foreground">
+          {formSnapshot?.name}
+          {formSnapshot?.description && (
+            <span className="ml-1 font-normal text-muted-foreground">
+              — {formSnapshot.description}
+            </span>
+          )}
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saveMutation.isPending}
+            className="flex-1 rounded-[8px] bg-primary py-[10px] text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+          >
+            {saveMutation.isPending ? 'Saving…' : 'Save Influencer'}
+          </button>
+          <button
+            type="button"
+            onClick={handleStartOver}
+            disabled={saveMutation.isPending}
+            className="rounded-[8px] border border-border px-4 py-[10px] text-[13px] font-semibold text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+          >
+            Start Over
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Step 1: Form ──────────────────────────────────────────────────────────────
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
       {/* Name */}
@@ -123,14 +201,14 @@ export function CreateInfluencerForm({ onCreated }: Props) {
         <label className="mb-1.5 block text-[12.5px] font-semibold text-foreground">
           Source image
         </label>
-        {preview ? (
-          <div className="relative rounded-[8px] overflow-hidden border border-border">
-            <img src={preview} alt="Source" className="w-full h-40 object-cover" />
+        {filePreview ? (
+          <div className="relative overflow-hidden rounded-[8px] border border-border">
+            <img src={filePreview} alt="Source" className="h-40 w-full object-cover" />
             <button
               type="button"
               onClick={() => {
                 setSourceFile(null);
-                setPreview(null);
+                setFilePreview(null);
               }}
               className="absolute right-2 top-2 rounded-full bg-black/60 p-1 text-white hover:bg-black/80"
             >
@@ -149,7 +227,7 @@ export function CreateInfluencerForm({ onCreated }: Props) {
         ) : (
           <div
             {...getRootProps()}
-            className={`flex flex-col items-center justify-center rounded-[8px] border-2 border-dashed p-6 text-center cursor-pointer transition-colors ${
+            className={`flex cursor-pointer flex-col items-center justify-center rounded-[8px] border-2 border-dashed p-6 text-center transition-colors ${
               isDragActive ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'
             }`}
           >
@@ -183,7 +261,7 @@ export function CreateInfluencerForm({ onCreated }: Props) {
             {...register('descriptionText')}
             rows={4}
             placeholder="Tall woman with high cheekbones, olive skin, dark wavy hair, athletic build..."
-            className="w-full rounded-[8px] border border-input bg-background px-3 py-[9px] text-[13px] placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 resize-none"
+            className="w-full resize-none rounded-[8px] border border-input bg-background px-3 py-[9px] text-[13px] placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
           />
           {!descriptionText && !sourceFile && (
             <p className="mt-1 text-[11.5px] text-amber-500">Provide an image or description</p>
@@ -197,43 +275,12 @@ export function CreateInfluencerForm({ onCreated }: Props) {
         disabled={isLoading}
         className="w-full rounded-[8px] bg-primary py-[10px] text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
       >
-        {isUploading ? 'Uploading…' : mutation.isPending ? 'Extracting DNA…' : 'Create Influencer'}
+        {isUploading
+          ? 'Uploading…'
+          : previewMutation.isPending
+            ? 'Extracting DNA & generating profile…'
+            : 'Generate Profile Image'}
       </button>
-
-      {/* DNA summary after extraction */}
-      {extractedDna && (
-        <details className="rounded-[8px] border border-border bg-muted p-3">
-          <summary className="cursor-pointer text-[12px] font-semibold text-muted-foreground">
-            Extracted DNA — view details
-          </summary>
-          <div className="mt-2 space-y-1 text-[11.5px] text-muted-foreground">
-            <p>
-              <span className="font-medium text-foreground">Face:</span>{' '}
-              {extractedDna.immutable.facial_topology}
-            </p>
-            <p>
-              <span className="font-medium text-foreground">Skin:</span>{' '}
-              {extractedDna.immutable.skin_texture}
-            </p>
-            <p>
-              <span className="font-medium text-foreground">Bone:</span>{' '}
-              {extractedDna.immutable.bone_structure}
-            </p>
-            <p>
-              <span className="font-medium text-foreground">Body:</span>{' '}
-              {extractedDna.immutable.body_morphology}
-            </p>
-            <p>
-              <span className="font-medium text-foreground">Wardrobe:</span>{' '}
-              {extractedDna.dynamic.wardrobe}
-            </p>
-            <p>
-              <span className="font-medium text-foreground">Lighting:</span>{' '}
-              {extractedDna.dynamic.lighting}
-            </p>
-          </div>
-        </details>
-      )}
     </form>
   );
 }

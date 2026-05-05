@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from config.settings import settings
 from providers import BaseProvider, ProviderUnavailableError, build_active_providers
+from routers.generation import _fetch_source_image
 from schemas.influencer import (
     ExtractDnaRequest,
     ExtractDnaResponse,
@@ -18,7 +19,7 @@ from schemas.influencer import (
     GenerateInfluencerResponse,
 )
 from services.influencer import extract_character_dna, build_anchored_prompt
-from services.generation import generate_text_with_failover, upload_to_s3
+from services.generation import generate_influencer_with_failover, upload_to_s3
 
 logger = logging.getLogger("ai-service")
 router = APIRouter(prefix="/influencer", tags=["influencer"])
@@ -55,6 +56,7 @@ async def extract_dna(request: ExtractDnaRequest) -> ExtractDnaResponse:
         dna_dict = await extract_character_dna(
             source_image_url=request.source_image_url,
             description=request.description,
+            name=request.name,
             model_name=settings.augmentation_model,
             timeout_seconds=settings.influencer_extraction_timeout_seconds,
         )
@@ -74,12 +76,14 @@ async def generate_influencer(
 ) -> GenerateInfluencerResponse:
     """
     Generate an image anchored to the provided character DNA.
-    Delegates to generate_text_with_failover with the DNA-prefixed prompt.
+    When source_image_url is set, uses img2img with strength=reference_strength for face lock.
+    Falls back to text-only generation when no reference image is available.
     use_int8 is forwarded to the local provider; cloud providers ignore it.
     """
     logger.info(
-        "generate_influencer: job=%s user=%s influencer=%s model=%s use_int8=%s",
-        request.job_id, request.user_id, request.influencer_id, request.model, request.use_int8,
+        "generate_influencer: job=%s user=%s influencer=%s model=%s use_int8=%s has_ref=%s",
+        request.job_id, request.user_id, request.influencer_id, request.model,
+        request.use_int8, bool(request.source_image_url),
     )
 
     dna_dict = request.character_dna.model_dump()
@@ -96,13 +100,27 @@ async def generate_influencer(
         request.job_id, len(anchored_prompt), anchored_prompt,
     )
 
+    # Fetch reference image bytes if a source URL is provided
+    ref_bytes: bytes | None = None
+    if request.source_image_url:
+        try:
+            ref_bytes = await _fetch_source_image(request.source_image_url)
+        except Exception as err:
+            logger.warning(
+                "Failed to fetch reference image for job %s, falling back to text-only: %s",
+                request.job_id, err,
+            )
+
     try:
-        img_bytes, width, height, provider_name = await generate_text_with_failover(
+        img_bytes, width, height, provider_name = await generate_influencer_with_failover(
             providers,
             prompt=anchored_prompt,
-            negative_prompt=None,
+            ref_bytes=ref_bytes,
             aspect_ratio=request.aspect_ratio,
             quality=request.quality,
+            use_int8=request.use_int8,
+            seed=dna_dict.get("seed"),
+            reference_strength=request.reference_strength,
         )
     except ProviderUnavailableError as err:
         logger.error("All providers failed for influencer job %s: %s", request.job_id, err)
@@ -122,5 +140,6 @@ async def generate_influencer(
         model=request.model,
         width=width,
         height=height,
+        seed=dna_dict.get("seed"),
         anchored_prompt=anchored_prompt,
     )

@@ -7,6 +7,7 @@ export type CreateInfluencerData = {
   description?: string;
   sourceImageUrl?: string;
   characterDna: Record<string, unknown>;
+  profileImageUrl: string;
 };
 
 export type PaginatedInfluencers = { influencers: Influencer[]; total: number };
@@ -19,6 +20,7 @@ export const influencerRepository = {
         name: data.name,
         description: data.description,
         sourceImageUrl: data.sourceImageUrl,
+        profileImageUrl: data.profileImageUrl,
         characterDna: data.characterDna as Prisma.InputJsonValue,
       },
     });

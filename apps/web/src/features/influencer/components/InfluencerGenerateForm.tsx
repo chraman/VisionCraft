@@ -13,6 +13,7 @@ const schema = z.object({
   aspectRatio: z.enum(['1:1', '16:9', '9:16', '4:3', '3:4']).default('1:1'),
   quality: z.enum(['standard', 'hd']).default('standard'),
   useInt8: z.boolean().default(false),
+  referenceStrength: z.number().min(0.1).max(0.5).default(0.25),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -50,11 +51,13 @@ export function InfluencerGenerateForm({
       aspectRatio: '1:1',
       quality: 'standard',
       useInt8: false,
+      referenceStrength: 0.25,
     },
   });
 
   const aspectRatio = watch('aspectRatio');
   const quality = watch('quality');
+  const referenceStrength = watch('referenceStrength');
 
   function onSubmit(values: FormValues) {
     onSubmitStart();
@@ -67,6 +70,7 @@ export function InfluencerGenerateForm({
         aspectRatio: values.aspectRatio,
         quality: values.quality,
         useInt8: values.useInt8,
+        referenceStrength: values.referenceStrength,
       },
       {
         onSuccess: ({ jobId }) => onJobStarted(jobId),
@@ -182,7 +186,7 @@ export function InfluencerGenerateForm({
         </div>
       </div>
 
-      {/* Advanced — int8 */}
+      {/* Advanced — int8 + reference strength */}
       <details className="rounded-[8px] border border-border p-3">
         <summary className="cursor-pointer text-[12px] font-semibold text-muted-foreground">
           Advanced
@@ -191,6 +195,22 @@ export function InfluencerGenerateForm({
           <input type="checkbox" {...register('useInt8')} className="rounded" />
           Use 8-bit precision (local model only — reduces VRAM)
         </label>
+        <div className="mt-3">
+          <label className="mb-1 block text-[12px] font-semibold text-muted-foreground">
+            Reference strength: {referenceStrength.toFixed(2)}
+          </label>
+          <input
+            type="range"
+            min={0.1}
+            max={0.5}
+            step={0.05}
+            {...register('referenceStrength', { valueAsNumber: true })}
+            className="w-full"
+          />
+          <p className="mt-0.5 text-[11px] text-muted-foreground">
+            Lower = more creative; higher = closer to profile image
+          </p>
+        </div>
       </details>
 
       <button

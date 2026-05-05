@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const createInfluencerSchema = z
+export const previewInfluencerSchema = z
   .object({
     name: z.string().min(1).max(100),
     description: z.string().max(500).optional(),
@@ -11,6 +11,14 @@ export const createInfluencerSchema = z
     message: 'Either sourceImageUrl or descriptionText must be provided',
   });
 
+export const createInfluencerSchema = z.object({
+  name: z.string().min(1).max(100),
+  description: z.string().max(500).optional(),
+  sourceImageUrl: z.string().optional(),
+  characterDna: z.record(z.unknown()),
+  profileImageUrl: z.string().url(),
+});
+
 export const generateInfluencerSchema = z.object({
   influencerId: z.string().cuid(),
   targetPrompt: z.string().min(3).max(2000),
@@ -20,6 +28,7 @@ export const generateInfluencerSchema = z.object({
   aspectRatio: z.enum(['1:1', '16:9', '9:16', '4:3', '3:4']).optional().default('1:1'),
   quality: z.enum(['standard', 'hd']).optional().default('standard'),
   useInt8: z.boolean().optional().default(false),
+  referenceStrength: z.number().min(0).max(1).default(0.25).optional(),
 });
 
 export const listInfluencersSchema = z.object({
@@ -28,6 +37,7 @@ export const listInfluencersSchema = z.object({
   order: z.enum(['asc', 'desc']).optional().default('desc'),
 });
 
+export type PreviewInfluencerInput = z.infer<typeof previewInfluencerSchema>;
 export type CreateInfluencerInput = z.infer<typeof createInfluencerSchema>;
 export type GenerateInfluencerInput = z.infer<typeof generateInfluencerSchema>;
 export type ListInfluencersInput = z.infer<typeof listInfluencersSchema>;

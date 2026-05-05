@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { randomUUID } from 'crypto';
 import { AppError } from '@ai-platform/types';
 import { REDIS_KEYS, REDIS_TTL, QUEUE_NAMES, SERVICE_URLS } from '@ai-platform/config';
 import { influencerRepository } from '../repositories/influencer.repository';
@@ -6,15 +7,19 @@ import { jobRepository } from '../repositories/job.repository';
 import { checkQuota } from './quota.service';
 import { getRedis } from '../lib/redis';
 import { getImageQueue } from '../lib/queue';
+import { toCdnUrl } from '../lib/s3';
 import type {
+  PreviewInfluencerInput,
   CreateInfluencerInput,
   GenerateInfluencerInput,
   ListInfluencersInput,
 } from '../schemas/influencer.schemas';
 
 export const influencerService = {
-  async createInfluencer(userId: string, _tier: string, input: CreateInfluencerInput) {
+  async previewInfluencer(userId: string, input: PreviewInfluencerInput) {
     const aiServiceUrl = SERVICE_URLS.AI();
+
+    // Step 1: Extract character DNA (includes face_anchor + seed)
     let extractResponse;
     try {
       extractResponse = await axios.post(
@@ -36,12 +41,51 @@ export const influencerService = {
 
     const characterDna = extractResponse.data.character_dna as Record<string, unknown>;
 
+    // Step 2: Generate canonical full-body profile image synchronously
+    const profileJobId = `profile_${randomUUID()}`;
+    let generateResponse;
+    try {
+      generateResponse = await axios.post(
+        `${aiServiceUrl}/influencer/generate`,
+        {
+          job_id: profileJobId,
+          user_id: userId,
+          influencer_id: 'preview',
+          character_dna: characterDna,
+          target_prompt: 'full body portrait, professional photography, standing pose',
+          model: 'sdxl',
+          aspect_ratio: '9:16',
+          quality: 'standard',
+          use_int8: false,
+        },
+        { timeout: 120_000 }
+      );
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        const detail = err.response?.data?.detail ?? err.response?.data?.message ?? err.message;
+        throw new AppError(
+          'PROVIDER_UNAVAILABLE',
+          `Profile image generation failed: ${String(detail)}`,
+          503
+        );
+      }
+      throw err;
+    }
+
+    const imageKey: string = generateResponse.data.image_key;
+    const profileImageUrl = toCdnUrl(imageKey);
+
+    return { characterDna, profileImageUrl };
+  },
+
+  async createInfluencer(userId: string, _tier: string, input: CreateInfluencerInput) {
     return influencerRepository.create({
       userId,
       name: input.name,
       description: input.description,
       sourceImageUrl: input.sourceImageUrl,
-      characterDna,
+      characterDna: input.characterDna,
+      profileImageUrl: input.profileImageUrl,
     });
   },
 
@@ -70,6 +114,8 @@ export const influencerService = {
     const influencer = await influencerRepository.findByIdAndUser(input.influencerId, userId);
     if (!influencer) throw new AppError('NOT_FOUND', 'Influencer not found', 404);
 
+    const referenceStrength = input.referenceStrength ?? 0.25;
+
     const job = await jobRepository.create({
       userId,
       type: 'INFLUENCER',
@@ -83,6 +129,8 @@ export const influencerService = {
         emotionModifier: input.emotionModifier,
         sceneParams: input.sceneParams,
         useInt8: input.useInt8 ?? false,
+        sourceImageUrl: influencer.profileImageUrl ?? undefined,
+        referenceStrength,
       },
     });
 
@@ -99,6 +147,8 @@ export const influencerService = {
       emotionModifier: input.emotionModifier,
       sceneParams: input.sceneParams,
       useInt8: input.useInt8 ?? false,
+      sourceImageUrl: influencer.profileImageUrl ?? undefined,
+      referenceStrength,
     };
 
     await getRedis().set(
