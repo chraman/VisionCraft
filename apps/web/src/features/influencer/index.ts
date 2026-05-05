@@ -3,6 +3,7 @@ export { InfluencerCard } from './components/InfluencerCard';
 export { InfluencerVault } from './components/InfluencerVault';
 export { InfluencerGenerateForm } from './components/InfluencerGenerateForm';
 export { InfluencerGallery } from './components/InfluencerGallery';
+export { InfluencerProfileModal } from './components/InfluencerProfileModal';
 export { useCreateInfluencer } from './hooks/useCreateInfluencer';
 export { useInfluencers } from './hooks/useInfluencers';
 export { useInfluencerGeneration } from './hooks/useInfluencerGeneration';

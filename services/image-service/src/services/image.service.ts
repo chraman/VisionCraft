@@ -124,11 +124,11 @@ export const imageService = {
 
   async listSavedImages(userId: string, params: ListImagesInput): Promise<PaginatedImagesResponse> {
     const limit = params.limit ?? 20;
-    const { images, total } = await imageRepository.findSavedByUser(userId, {
-      limit,
-      cursor: params.cursor,
-      order: params.order ?? 'desc',
-    });
+    const opts = { limit, cursor: params.cursor, order: params.order ?? ('desc' as const) };
+
+    const { images, total } = params.influencerId
+      ? await imageRepository.findByInfluencer(userId, params.influencerId, opts)
+      : await imageRepository.findSavedByUser(userId, opts);
 
     const hasMore = images.length > limit;
     const items = hasMore ? images.slice(0, limit) : images;

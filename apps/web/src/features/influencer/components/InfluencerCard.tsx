@@ -4,6 +4,7 @@ interface Props {
   influencer: Influencer;
   onGenerate: () => void;
   onDelete: () => void;
+  onCardClick: () => void;
 }
 
 const GRADIENTS = [
@@ -22,7 +23,7 @@ function nameToPaletteIdx(name: string): number {
   return Math.abs(h) % GRADIENTS.length;
 }
 
-export function InfluencerCard({ influencer, onGenerate, onDelete }: Props) {
+export function InfluencerCard({ influencer, onGenerate, onDelete, onCardClick }: Props) {
   const gradient = GRADIENTS[nameToPaletteIdx(influencer.name)];
   const faceAnchor = influencer.characterDna?.face_anchor;
   const createdDate = new Date(influencer.createdAt).toLocaleDateString(undefined, {
@@ -32,8 +33,8 @@ export function InfluencerCard({ influencer, onGenerate, onDelete }: Props) {
 
   return (
     <div className="overflow-hidden rounded-[14px] border border-border bg-card cursor-pointer group hover:shadow-md transition-shadow">
-      {/* Portrait image area */}
-      <div className="relative" style={{ aspectRatio: '3/4' }}>
+      {/* Portrait image area — clicking opens the profile modal */}
+      <div className="relative cursor-pointer" style={{ aspectRatio: '3/4' }} onClick={onCardClick}>
         {influencer.profileImageUrl ? (
           <img
             src={influencer.profileImageUrl}

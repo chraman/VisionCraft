@@ -85,6 +85,24 @@ export const imageRepository = {
     });
   },
 
+  async findByInfluencer(
+    userId: string,
+    influencerId: string,
+    params: { limit: number; cursor?: string; order?: 'asc' | 'desc' }
+  ): Promise<PaginatedImages> {
+    const { limit, cursor, order = 'desc' } = params;
+    const [images, total] = await Promise.all([
+      prisma.image.findMany({
+        where: { userId, influencerId, deletedAt: null },
+        orderBy: { createdAt: order },
+        take: limit + 1,
+        ...(cursor && { cursor: { id: cursor }, skip: 1 }),
+      }),
+      prisma.image.count({ where: { userId, influencerId, deletedAt: null } }),
+    ]);
+    return { images, total };
+  },
+
   async softDelete(id: string, userId: string): Promise<void> {
     await prisma.image.update({
       where: { id },

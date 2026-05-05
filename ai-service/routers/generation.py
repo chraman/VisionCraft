@@ -1,4 +1,5 @@
-"""Generation endpoints — POST /generate/text and POST /generate/image."""
+"""Generation endpoints — POST /generate/text, POST /generate/image, POST /generate/describe-scene."""
+import base64
 import logging
 from typing import Annotated
 
@@ -6,6 +7,7 @@ import boto3
 import httpx
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from config.settings import settings
 from middleware.safety import safety_check
@@ -17,6 +19,15 @@ from services.generation import (
     generate_text_with_failover,
     upload_to_s3,
 )
+
+
+class DescribeSceneRequest(BaseModel):
+    image_base64: str
+    mime_type: str = "image/jpeg"
+
+
+class DescribeSceneResponse(BaseModel):
+    prompt: str
 
 logger = logging.getLogger("ai-service")
 router = APIRouter(prefix="/generate", tags=["generation"])
@@ -163,6 +174,57 @@ async def generate_image(
         ),
         augmentation_ms=augmentation_result.augmentation_ms if augmentation_result else None,
     )
+
+
+_SCENE_DESCRIBE_PROMPT = (
+"Analyze the image and generate a cinematic FLUX/Stable Diffusion prompt that recreates "
+    "the exact visual composition while maintaining natural editorial-style wording. "
+    "Describe the scene as a cohesive cinematic moment, blending precise structural accuracy "
+    "with expressive photography language. "
+    "Accurately describe the subject’s pose and body mechanics, including body orientation, "
+    "leg positioning, arm placement, posture, spine angle, shoulder direction, head tilt, "
+    "gaze direction, hand placement, weight balance, and camera-relative positioning. "
+    "The pose must feel natural, candid, believable, and visually grounded in the environment. "
+    "Describe outfit details naturally, including fabric texture, wrinkles, movement, tightness, "
+    "wetness, transparency, layering, and interaction with lighting, wind, water, furniture, or surroundings. "
+    "Include facial expression, emotional vibe, hair behavior, and candid influencer-style energy. "
+    "Also describe the environment cinematically: location, atmosphere, lighting, shadows, "
+    "weather, color palette, depth, focal length, composition, background elements, "
+    "bokeh, camera angle, cinematic mood, and photography aesthetic. "
+    "Emphasize photorealism, realistic anatomy, authentic posture, natural skin texture, "
+    "realistic lighting behavior, DSLR-quality detail, and believable human presence. "
+    "Avoid robotic phrasing, generic wording, exaggerated anatomy, or invented details not visible in the image. "
+    "Write in smooth natural-language cinematic phrasing instead of rigid attribute lists. "
+    "Output ONLY the final prompt text as concise comma-separated cinematic phrases. "
+    "Maximum 180 words."
+)
+
+
+@router.post("/describe-scene", response_model=DescribeSceneResponse)
+async def describe_scene(request: DescribeSceneRequest) -> DescribeSceneResponse:
+    """Use Gemini vision to describe a scene image as a generation prompt."""
+    try:
+        import io
+        import PIL.Image
+        import google.generativeai as genai  # type: ignore[import]
+
+        image_bytes = base64.b64decode(request.image_base64)
+        pil_image = PIL.Image.open(io.BytesIO(image_bytes))
+
+        genai.configure(api_key=settings.gemini_api_key)
+        model = genai.GenerativeModel(settings.augmentation_model)
+        response = await model.generate_content_async(
+            [_SCENE_DESCRIBE_PROMPT, pil_image],
+            generation_config={"max_output_tokens": 200, "temperature": 0.4},
+        )
+        prompt_text = response.text.strip()
+        if not prompt_text:
+            raise ValueError("Gemini returned empty description")
+        _log(f"[ai-service] describe-scene: {len(image_bytes)} bytes → {len(prompt_text)} chars")
+        return DescribeSceneResponse(prompt=prompt_text)
+    except Exception as err:
+        logger.warning("describe-scene failed: %s", str(err)[:200])
+        raise HTTPException(status_code=500, detail=f"Scene description failed: {err}") from err
 
 
 async def _fetch_source_image(image_url: str) -> bytes:

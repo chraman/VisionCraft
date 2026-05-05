@@ -59,6 +59,24 @@ export async function uploadFileToS3(uploadUrl: string, file: File): Promise<voi
   }
 }
 
+export async function describeSceneImage(file: File): Promise<string> {
+  const imageBase64 = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      // Strip "data:<mime>;base64," prefix
+      resolve(dataUrl.split(',')[1] ?? '');
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  const res = await apiClient.post<{ success: true; data: { prompt: string }; requestId: string }>(
+    API_ROUTES.IMAGES.DESCRIBE_SCENE,
+    { imageBase64, mimeType: file.type }
+  );
+  return unwrapResponse(res).prompt;
+}
+
 export async function getSavedImages(
   params: CursorPaginationParams = {}
 ): Promise<PaginatedResponse<Image>> {

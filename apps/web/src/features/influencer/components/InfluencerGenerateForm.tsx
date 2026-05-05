@@ -5,7 +5,11 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useInfluencers } from '../hooks/useInfluencers';
 import { useInfluencerGeneration } from '../hooks/useInfluencerGeneration';
-import { getPresignedUploadUrl, uploadFileToS3 } from '../../../services/image.service';
+import {
+  getPresignedUploadUrl,
+  uploadFileToS3,
+  describeSceneImage,
+} from '../../../services/image.service';
 import type { Influencer } from '@ai-platform/types';
 
 const schema = z.object({
@@ -62,6 +66,7 @@ export function InfluencerGenerateForm({
   const [sceneFile, setSceneFile] = useState<File | null>(null);
   const [scenePreview, setScenePreview] = useState<string | null>(null);
   const [isUploadingScene, setIsUploadingScene] = useState(false);
+  const [isDescribingScene, setIsDescribingScene] = useState(false);
 
   const influencers: Influencer[] = data?.pages.flatMap((p) => p.data) ?? [];
 
@@ -90,12 +95,27 @@ export function InfluencerGenerateForm({
   const selectedInfluencer = influencers.find((i) => i.id === influencerId) ?? null;
   const { label: strLabel, sub: strSub } = getStrengthLabel(referenceStrength);
 
-  const onDropScene = useCallback((accepted: File[]) => {
-    const file = accepted[0];
-    if (!file) return;
-    setSceneFile(file);
-    setScenePreview(URL.createObjectURL(file));
-  }, []);
+  const onDropScene = useCallback(
+    (accepted: File[]) => {
+      const file = accepted[0];
+      if (!file) return;
+      setSceneFile(file);
+      setScenePreview(URL.createObjectURL(file));
+
+      setIsDescribingScene(true);
+      describeSceneImage(file)
+        .then((prompt) => {
+          setValue('targetPrompt', prompt, { shouldValidate: true });
+        })
+        .catch(() => {
+          // silent — user can type prompt manually
+        })
+        .finally(() => {
+          setIsDescribingScene(false);
+        });
+    },
+    [setValue]
+  );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: onDropScene,
@@ -111,6 +131,7 @@ export function InfluencerGenerateForm({
       URL.revokeObjectURL(scenePreview);
       setScenePreview(null);
     }
+    setIsDescribingScene(false);
   }
 
   async function onSubmit(values: FormValues) {
@@ -149,7 +170,7 @@ export function InfluencerGenerateForm({
     );
   }
 
-  const isSubmitting = isUploadingScene || mutation.isPending;
+  const isSubmitting = isUploadingScene || mutation.isPending || isDescribingScene;
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-6">
@@ -261,16 +282,69 @@ export function InfluencerGenerateForm({
 
       {/* Scene prompt */}
       <div>
-        <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.6px] text-muted-foreground">
-          Prompt <span className="text-red-500">*</span>
-        </label>
-        <textarea
-          {...register('targetPrompt')}
-          rows={4}
-          placeholder="Walking through a misty forest at golden hour, soft rim light, wearing a cream linen jacket, cinematic 35mm photography…"
-          className="w-full resize-none rounded-[8px] border border-input bg-background px-3 py-[9px] text-[13px] leading-relaxed placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
-        />
-        {errors.targetPrompt && (
+        <div className="mb-2 flex items-center justify-between">
+          <label className="text-[11px] font-semibold uppercase tracking-[0.6px] text-muted-foreground">
+            Prompt <span className="text-red-500">*</span>
+          </label>
+          {isDescribingScene && (
+            <span className="flex items-center gap-1.5 text-[10.5px] text-primary">
+              <svg
+                className="animate-spin"
+                width={11}
+                height={11}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M21 12a9 9 0 1 1-3-6.7" />
+              </svg>
+              Reading scene…
+            </span>
+          )}
+        </div>
+        <div className="relative">
+          <textarea
+            {...register('targetPrompt')}
+            rows={4}
+            disabled={isDescribingScene}
+            placeholder={
+              isDescribingScene
+                ? 'Analyzing scene image with Gemini…'
+                : 'Walking through a misty forest at golden hour, soft rim light, wearing a cream linen jacket, cinematic 35mm photography…'
+            }
+            className={`w-full resize-none rounded-[8px] border px-3 py-[9px] text-[13px] leading-relaxed placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 transition-colors ${
+              isDescribingScene
+                ? 'border-primary/40 bg-primary/5 text-muted-foreground'
+                : 'border-input bg-background'
+            }`}
+          />
+          {isDescribingScene && (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-[8px]">
+              <div className="flex items-center gap-2 rounded-full bg-background/90 px-3 py-1.5 shadow-sm">
+                <svg
+                  className="animate-spin text-primary"
+                  width={13}
+                  height={13}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2.5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M21 12a9 9 0 1 1-3-6.7" />
+                </svg>
+                <span className="text-[12px] font-medium text-primary">
+                  Generating prompt from scene…
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+        {errors.targetPrompt && !isDescribingScene && (
           <p className="mt-1 text-[11.5px] text-red-500">{errors.targetPrompt.message}</p>
         )}
       </div>
@@ -495,11 +569,13 @@ export function InfluencerGenerateForm({
         disabled={isSubmitting}
         className="w-full rounded-[8px] bg-primary py-[10px] text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
       >
-        {isUploadingScene
-          ? 'Uploading scene…'
-          : mutation.isPending
-            ? 'Generating…'
-            : 'Generate · 1 credit'}
+        {isDescribingScene
+          ? 'Reading scene…'
+          : isUploadingScene
+            ? 'Uploading scene…'
+            : mutation.isPending
+              ? 'Generating…'
+              : 'Generate · 1 credit'}
       </button>
     </form>
   );

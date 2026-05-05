@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
+import axios from 'axios';
 import { createLogger } from '@ai-platform/utils';
-import { REDIS_KEYS } from '@ai-platform/config';
+import { REDIS_KEYS, SERVICE_URLS } from '@ai-platform/config';
 import { imageService } from '../services/image.service';
 import { jobRepository } from '../repositories/job.repository';
 import { imageRepository } from '../repositories/image.repository';
@@ -10,6 +11,7 @@ import {
   generateImageSchema,
   uploadUrlSchema,
   listImagesSchema,
+  describeSceneSchema,
 } from '../schemas/image.schemas';
 import { AppError } from '@ai-platform/types';
 
@@ -220,6 +222,31 @@ export const imageController = {
     const { id } = req.params as { id: string };
     await imageService.saveImage(id, userId);
     res.json({ success: true, data: null, requestId: requestId(res) });
+  },
+
+  async describeScene(req: Request, res: Response): Promise<void> {
+    const parsed = describeSceneSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: parsed.error.issues[0]?.message ?? 'Invalid input',
+        },
+        requestId: requestId(res),
+      });
+      return;
+    }
+    const aiUrl = `${SERVICE_URLS.AI()}/generate/describe-scene`;
+    const response = await axios.post<{ prompt: string }>(
+      aiUrl,
+      {
+        image_base64: parsed.data.imageBase64,
+        mime_type: parsed.data.mimeType,
+      },
+      { timeout: 30_000 }
+    );
+    res.json({ success: true, data: { prompt: response.data.prompt }, requestId: requestId(res) });
   },
 
   async deleteImage(req: Request, res: Response): Promise<void> {

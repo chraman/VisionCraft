@@ -19,6 +19,8 @@ imageRouter.post(
 
 imageRouter.post('/upload-url', asyncHandler(imageController.getUploadUrl));
 
+imageRouter.post('/describe-scene', asyncHandler(imageController.describeScene));
+
 imageRouter.get('/jobs/:id', asyncHandler(imageController.getJob));
 
 // SSE — not wrapped in asyncHandler; manages its own lifecycle

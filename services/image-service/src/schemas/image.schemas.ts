@@ -23,12 +23,19 @@ export const uploadUrlSchema = z.object({
   contentType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
 });
 
+export const describeSceneSchema = z.object({
+  imageBase64: z.string().min(1),
+  mimeType: z.string().default('image/jpeg'),
+});
+
 export const listImagesSchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).optional().default(20),
   cursor: z.string().optional(),
   order: z.enum(['asc', 'desc']).optional().default('desc'),
+  influencerId: z.string().optional(),
 });
 
+export type DescribeSceneInput = z.infer<typeof describeSceneSchema>;
 export type GenerateTextInput = z.infer<typeof generateTextSchema>;
 export type GenerateImageInput = z.infer<typeof generateImageSchema>;
 export type UploadUrlInput = z.infer<typeof uploadUrlSchema>;
