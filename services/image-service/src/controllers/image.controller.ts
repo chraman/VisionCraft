@@ -244,7 +244,7 @@ export const imageController = {
         image_base64: parsed.data.imageBase64,
         mime_type: parsed.data.mimeType,
       },
-      { timeout: 30_000 }
+      { timeout: 120_000 }
     );
     res.json({ success: true, data: { prompt: response.data.prompt }, requestId: requestId(res) });
   },
