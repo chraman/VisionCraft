@@ -10,7 +10,7 @@ import {
   uploadFileToS3,
   describeSceneImage,
 } from '../../../services/image.service';
-import type { Influencer } from '@ai-platform/types';
+import type { Influencer, GenerateInfluencerRequest } from '@ai-platform/types';
 
 const schema = z.object({
   influencerId: z.string().min(1, 'Select an influencer'),
@@ -27,7 +27,7 @@ const ASPECT_RATIOS = ['1:1', '4:5', '9:16', '16:9'] as const;
 
 interface Props {
   preSelectedInfluencerId?: string | null;
-  onJobStarted: (jobId: string) => void;
+  onJobStarted: (jobId: string, params: GenerateInfluencerRequest) => void;
   onSubmitStart: () => void;
   onSubmitError: () => void;
 }
@@ -153,21 +153,20 @@ export function InfluencerGenerateForm({
       }
     }
 
-    mutation.mutate(
-      {
-        influencerId: values.influencerId,
-        targetPrompt: values.targetPrompt,
-        aspectRatio: values.aspectRatio,
-        quality: values.quality,
-        referenceStrength: values.referenceStrength,
-        useInt8: values.useInt8,
-        sceneImageUrl,
-      },
-      {
-        onSuccess: ({ jobId }) => onJobStarted(jobId),
-        onError: () => onSubmitError(),
-      }
-    );
+    const params: GenerateInfluencerRequest = {
+      influencerId: values.influencerId,
+      targetPrompt: values.targetPrompt,
+      aspectRatio: values.aspectRatio,
+      quality: values.quality,
+      referenceStrength: values.referenceStrength,
+      useInt8: values.useInt8,
+      sceneImageUrl,
+    };
+
+    mutation.mutate(params, {
+      onSuccess: ({ jobId }) => onJobStarted(jobId, params),
+      onError: () => onSubmitError(),
+    });
   }
 
   const isSubmitting = isUploadingScene || mutation.isPending || isDescribingScene;

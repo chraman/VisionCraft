@@ -177,28 +177,37 @@ async def generate_image(
 
 
 _SCENE_DESCRIBE_PROMPT = (
-"Analyze the image and generate a cinematic FLUX/Stable Diffusion prompt that recreates "
-    "the exact visual composition while maintaining natural editorial-style wording. "
-    "Describe the scene as a cohesive cinematic moment, blending precise structural accuracy "
-    "with expressive photography language. "
-    "Accurately describe the subject’s pose and body mechanics, including body orientation, "
-    "leg positioning, arm placement, posture, spine angle, shoulder direction, head tilt, "
-    "gaze direction, hand placement, weight balance, and camera-relative positioning. "
-    "The pose must feel natural, candid, believable, and visually grounded in the environment. "
-    "Describe outfit details naturally, including fabric texture, wrinkles, movement, tightness, "
-    "wetness, transparency, layering, and interaction with lighting, wind, water, furniture, or surroundings. "
-    "Include facial expression, emotional vibe, hair behavior, and candid influencer-style energy. "
-    "Also describe the environment cinematically: location, atmosphere, lighting, shadows, "
-    "weather, color palette, depth, focal length, composition, background elements, "
-    "bokeh, camera angle, cinematic mood, and photography aesthetic. "
-    "Emphasize photorealism, realistic anatomy, authentic posture, natural skin texture, "
-    "realistic lighting behavior, DSLR-quality detail, and believable human presence. "
-    "Avoid robotic phrasing, generic wording, exaggerated anatomy, or invented details not visible in the image. "
-    "Write in smooth natural-language cinematic phrasing instead of rigid attribute lists. "
-    "Output ONLY the final prompt text as concise comma-separated cinematic phrases. "
-    "Maximum 180 words."
+    "Analyze the image and generate a cinematic photorealistic FLUX/Stable Diffusion prompt "
+    "written like a real editorial fashion photography description, not like a keyword list. "
+    "The output should feel like a believable photographed moment with strong cinematic atmosphere and natural visual storytelling. "
+    
+    "Describe the subject and environment together as one cohesive scene. "
+    "Accurately preserve the exact pose, composition, and camera perspective visible in the image, including: "
+    "body orientation, posture, leg positioning, arm placement, shoulder direction, spine curve, head tilt, "
+    "gaze direction, hand placement, weight distribution, balance, and interaction with furniture, ground, or surroundings. "
+    "The pose must feel candid, relaxed, physically believable, and naturally balanced. "
+    
+    "Describe clothing organically within the scene, focusing on realistic fabric behavior such as folds, wrinkles, stretching, "
+    "layering, wetness, transparency, tension, and how the material reacts to lighting, movement, furniture, wind, or environment. "
+    
+    "Include facial expression, emotional mood, hair movement, and candid influencer/editorial energy naturally within the phrasing. "
+    
+    "Describe the environment cinematically using immersive photography language: atmosphere, lighting style, realistic shadows, "
+    "depth, mood, color palette, foreground and background elements, framing, focal length, depth of field, bokeh, "
+    "camera angle, cinematic tone, and realistic environmental interaction. "
+    
+    "Prioritize photorealism, DSLR-quality realism, realistic skin texture, natural imperfections, believable anatomy, "
+    "authentic posture, realistic lighting falloff, natural hair strands, subtle fabric physics, and grounded human presence. "
+    
+    "Avoid robotic prompt wording, keyword stuffing, generic tags, repeated descriptors, AI-art phrasing, exaggerated anatomy, "
+    "plastic skin, or invented details not visible in the image. "
+    
+    "Write with smooth cinematic flow similar to a luxury fashion magazine or high-end editorial photography caption, "
+    "while still preserving visual accuracy and pose precision. "
+    
+    "Output ONLY the final prompt as concise cinematic comma-separated phrases with natural scene flow. "
+    "Maximum 140 words."
 )
-
 
 @router.post("/describe-scene", response_model=DescribeSceneResponse)
 async def describe_scene(request: DescribeSceneRequest) -> DescribeSceneResponse:

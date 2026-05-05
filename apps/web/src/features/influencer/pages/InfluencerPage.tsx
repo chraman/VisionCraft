@@ -1,12 +1,15 @@
 import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useFlag } from '@ai-platform/feature-flags';
+import { toast } from 'sonner';
 import { CreateInfluencerForm } from '../components/CreateInfluencerForm';
 import { InfluencerVault } from '../components/InfluencerVault';
 import { InfluencerGenerateForm } from '../components/InfluencerGenerateForm';
 import { InfluencerGallery } from '../components/InfluencerGallery';
 import { GenerationProgress } from '../../generate/components/GenerationProgress';
 import { ResultDisplay } from '../../generate/components/ResultDisplay';
+import { generateInfluencerImage } from '../../../services/influencer.service';
+import type { GenerateInfluencerRequest } from '@ai-platform/types';
 
 type Tab = 'vault' | 'create' | 'generate';
 
@@ -16,12 +19,28 @@ export default function InfluencerPage() {
   const [selectedInfluencerId, setSelectedInfluencerId] = useState<string | null>(null);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [lastGenParams, setLastGenParams] = useState<GenerateInfluencerRequest | null>(null);
 
   if (!isEnabled) return <Navigate to="/generate" replace />;
 
-  function handleJobStarted(jobId: string) {
+  function handleJobStarted(jobId: string, params: GenerateInfluencerRequest) {
+    setLastGenParams(params);
     setIsSubmitting(false);
     setActiveJobId(jobId);
+  }
+
+  async function handleRegenerate() {
+    if (!lastGenParams) return;
+    setIsSubmitting(true);
+    setActiveJobId(null);
+    try {
+      const { jobId } = await generateInfluencerImage(lastGenParams.influencerId, lastGenParams);
+      setActiveJobId(jobId);
+    } catch {
+      toast.error('Regeneration failed — please try again');
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   function handleSelectInfluencer(id: string) {
@@ -107,7 +126,9 @@ export default function InfluencerPage() {
                 setIsSubmitting(true);
                 setActiveJobId(null);
               }}
-              onSubmitError={() => setIsSubmitting(false)}
+              onSubmitError={() => {
+                setIsSubmitting(false);
+              }}
             />
           </div>
 
@@ -117,7 +138,7 @@ export default function InfluencerPage() {
             <ResultDisplay
               jobId={activeJobId}
               onClear={() => setActiveJobId(null)}
-              onRegenerate={() => {}}
+              onRegenerate={lastGenParams ? () => void handleRegenerate() : undefined}
             />
 
             {!isSubmitting && !activeJobId && (
