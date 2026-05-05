@@ -83,7 +83,8 @@ class LocalProvider(BaseProvider):
     async def generate_influencer_img2img(
         self,
         prompt: str,
-        ref_bytes: bytes,
+        ref_bytes: bytes | None,
+        scene_bytes: bytes | None,
         aspect_ratio: str,
         quality: str,
         use_int8: bool,
@@ -102,11 +103,17 @@ class LocalProvider(BaseProvider):
         if seed is not None:
             data["seed"] = str(seed)
 
+        files: dict = {}
+        if ref_bytes is not None:
+            files["reference_image"] = ("ref.png", io.BytesIO(ref_bytes), "image/png")
+        if scene_bytes is not None:
+            files["scene_image"] = ("scene.png", io.BytesIO(scene_bytes), "image/png")
+
         async with httpx.AsyncClient(timeout=300) as client:
             response = await client.post(
                 f"{self._base()}/influencer/generate",
                 data=data,
-                files={"reference_image": ("ref.png", io.BytesIO(ref_bytes), "image/png")},
+                files=files if files else None,
             )
             response.raise_for_status()
             result_bytes = response.content

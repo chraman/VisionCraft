@@ -77,13 +77,14 @@ async def generate_influencer_with_failover(
     providers: list[BaseProvider],
     prompt: str,
     ref_bytes: bytes | None,
+    scene_bytes: bytes | None,
     aspect_ratio: str,
     quality: str,
     use_int8: bool,
     seed: int | None,
     reference_strength: float,
 ) -> tuple[bytes, int, int, str]:
-    if ref_bytes is None:
+    if ref_bytes is None and scene_bytes is None:
         return await generate_text_with_failover(providers, prompt, None, aspect_ratio, quality)
 
     from providers.local_provider import LocalProvider
@@ -94,11 +95,13 @@ async def generate_influencer_with_failover(
         try:
             if isinstance(provider, LocalProvider):
                 img_bytes, w, h = await provider.generate_influencer_img2img(
-                    prompt, ref_bytes, aspect_ratio, quality, use_int8, seed, reference_strength
+                    prompt, ref_bytes, scene_bytes, aspect_ratio, quality, use_int8, seed, reference_strength
                 )
             else:
+                # Cloud providers fall back to scene image if available, else profile ref
+                fallback_bytes = scene_bytes if scene_bytes is not None else ref_bytes
                 img_bytes, w, h = await provider.generate_image(
-                    ref_bytes, prompt, reference_strength, aspect_ratio
+                    fallback_bytes, prompt, reference_strength, aspect_ratio
                 )
             _log(f"[ai-service] influencer img2img provider={provider.name} succeeded size={w}x{h}")
             return img_bytes, w, h, provider.name

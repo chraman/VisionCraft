@@ -37,6 +37,7 @@ export type AnalyticsEventName =
   | 'experiment_exposure'
   | 'variant_assigned'
   // Influencer
+  | 'influencer_preview_started'
   | 'influencer_created'
   | 'influencer_dna_extracted'
   | 'influencer_generation_started'
@@ -105,6 +106,35 @@ export interface ExperimentExposureEvent extends BaseAnalyticsEvent {
   variant: string;
 }
 
+export interface InfluencerPreviewStartedEvent extends BaseAnalyticsEvent {
+  event: 'influencer_preview_started';
+  influencerId: string;
+  hasSourceImage: boolean;
+}
+
+export interface InfluencerCreatedEvent extends BaseAnalyticsEvent {
+  event: 'influencer_created';
+  influencerId: string;
+  extractionMs: number;
+  model: string;
+}
+
+export interface InfluencerGenerationStartedEvent extends BaseAnalyticsEvent {
+  event: 'influencer_generation_started';
+  jobId: string;
+  influencerId: string;
+  hasEmotionModifier?: boolean;
+  hasSceneParams?: boolean;
+}
+
+export interface InfluencerGenerationCompletedEvent extends BaseAnalyticsEvent {
+  event: 'influencer_generation_completed';
+  jobId: string;
+  influencerId: string;
+  durationMs: number;
+  success: boolean;
+}
+
 export type AnalyticsEvent =
   | PageViewEvent
   | GenerationStartedEvent
@@ -113,4 +143,8 @@ export type AnalyticsEvent =
   | QuotaExceededEvent
   | FlagEvaluatedEvent
   | ExperimentExposureEvent
+  | InfluencerPreviewStartedEvent
+  | InfluencerCreatedEvent
+  | InfluencerGenerationStartedEvent
+  | InfluencerGenerationCompletedEvent
   | BaseAnalyticsEvent;

@@ -110,7 +110,7 @@ const NAV_ITEMS = [
   { to: '/dashboard', icon: 'dashboard', label: 'Dashboard' },
   { to: '/generate', icon: 'sparkle', label: 'Generate' },
   { to: '/gallery', icon: 'gallery', label: 'Gallery' },
-  { to: '/influencer', icon: 'influencer', label: 'Influencer' },
+  { to: '/influencer', icon: 'influencer', label: 'Influencers', badge: 'NEW' },
   { to: '/profile', icon: 'user', label: 'Settings' },
 ];
 
@@ -152,12 +152,12 @@ function Sidebar() {
 
       {/* Nav */}
       <nav className="flex flex-col gap-0.5">
-        {NAV_ITEMS.map(({ to, icon, label }) => (
+        {NAV_ITEMS.map(({ to, icon, label, badge }) => (
           <NavLink
             key={to}
             to={to}
             className={({ isActive }) =>
-              `flex items-center gap-[11px] rounded-lg px-3 py-[9px] text-[13.5px] font-medium transition-colors ${
+              `flex items-center gap-[10px] rounded-lg px-3 py-[9px] text-[13.5px] font-medium transition-colors ${
                 isActive
                   ? 'bg-soft text-primary font-semibold'
                   : 'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -171,7 +171,12 @@ function Sidebar() {
                   size={17}
                   className={isActive ? 'stroke-primary' : 'stroke-current'}
                 />
-                {label}
+                <span className="flex-1">{label}</span>
+                {badge && (
+                  <span className="rounded px-[6px] py-[2px] text-[9px] font-bold uppercase tracking-[0.4px] bg-primary text-primary-foreground leading-none">
+                    {badge}
+                  </span>
+                )}
               </>
             )}
           </NavLink>

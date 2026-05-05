@@ -53,6 +53,7 @@ export interface GenerateInfluencerRequest {
   quality?: string;
   useInt8?: boolean;
   referenceStrength?: number;
+  sceneImageUrl?: string;
 }
 
 export interface PreviewInfluencerRequest {
@@ -64,5 +65,13 @@ export interface PreviewInfluencerRequest {
 
 export interface PreviewInfluencerResponse {
   characterDna: CharacterDna;
+  profileImageUrl: string;
+}
+
+export interface ExtractDnaResponse {
+  characterDna: CharacterDna;
+}
+
+export interface PreviewImageResponse {
   profileImageUrl: string;
 }

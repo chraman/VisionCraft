@@ -2,10 +2,11 @@ import { apiClient, unwrapResponse } from '@ai-platform/api-client';
 import { API_ROUTES } from '@ai-platform/config';
 import type {
   Influencer,
-  ExtractDnaRequest,
   GenerateInfluencerRequest,
   PreviewInfluencerRequest,
   PreviewInfluencerResponse,
+  ExtractDnaResponse,
+  PreviewImageResponse,
   GenerateJobResponse,
   PaginatedResponse,
   CursorPaginationParams,
@@ -19,6 +20,29 @@ export async function previewInfluencer(
     data: PreviewInfluencerResponse;
     requestId: string;
   }>(API_ROUTES.INFLUENCERS.PREVIEW, req);
+  return unwrapResponse(res);
+}
+
+export async function extractInfluencerDna(
+  req: PreviewInfluencerRequest
+): Promise<ExtractDnaResponse> {
+  const res = await apiClient.post<{ success: true; data: ExtractDnaResponse; requestId: string }>(
+    API_ROUTES.INFLUENCERS.EXTRACT_DNA,
+    req
+  );
+  return unwrapResponse(res);
+}
+
+export async function generateInfluencerPreviewImage(req: {
+  name: string;
+  characterDna: Record<string, unknown>;
+  sourceImageUrl?: string;
+}): Promise<PreviewImageResponse> {
+  const res = await apiClient.post<{
+    success: true;
+    data: PreviewImageResponse;
+    requestId: string;
+  }>(API_ROUTES.INFLUENCERS.PREVIEW_IMAGE, req);
   return unwrapResponse(res);
 }
 

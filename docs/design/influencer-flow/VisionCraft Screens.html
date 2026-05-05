@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>VisionCraft — Screens</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+  html, body { margin: 0; padding: 0; background: #f0eee9; font-family: 'Inter', system-ui, sans-serif; }
+  #root { width: 100vw; height: 100vh; }
+  * { box-sizing: border-box; }
+  input, textarea, button { font-family: inherit; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="frames/design-canvas.jsx"></script>
+<script type="text/babel" src="frames/primitives.jsx"></script>
+<script type="text/babel" src="frames/screens.jsx"></script>
+<script type="text/babel" src="frames/gen-flow.jsx"></script>
+<script type="text/babel" src="frames/influencer-flow.jsx"></script>
+
+<script type="text/babel" data-presets="react">
+// ─── Tweakable defaults ─────────────────────────────────────
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "theme": "light",
+  "accent": "indigo",
+  "density": "comfortable",
+  "displayFont": "Instrument Serif"
+}/*EDITMODE-END*/;
+
+const ACCENTS = {
+  indigo: { p: '239 84% 67%', soft: '239 100% 97%', tint: '239 84% 98%' },
+  violet: { p: '262 83% 65%', soft: '262 100% 97%', tint: '262 83% 98%' },
+  teal:   { p: '178 78% 39%', soft: '178 60% 95%',  tint: '178 60% 97%' },
+};
+
+const DISPLAY_FONTS = {
+  'Instrument Serif': `'Instrument Serif', Georgia, serif`,
+  'Inter':            `'Inter', system-ui, sans-serif`,
+  'Space Grotesk':    `'Space Grotesk', system-ui, sans-serif`,
+};
+
+function applyTheme(t) {
+  const a = ACCENTS[t.accent] || ACCENTS.indigo;
+  const dark = t.theme === 'dark';
+  const root = document.documentElement;
+  const vars = dark ? {
+    '--vc-bg': '224 20% 8%',
+    '--vc-fg': '210 15% 96%',
+    '--vc-card': '224 15% 11%',
+    '--vc-border': '220 10% 20%',
+    '--vc-muted': '220 12% 15%',
+    '--vc-muted-fg': '220 10% 65%',
+    '--vc-primary': a.p,
+    '--vc-soft': '239 40% 18%',
+    '--vc-tint': '224 15% 10%',
+  } : {
+    '--vc-bg': '0 0% 100%',
+    '--vc-fg': '224 20% 10%',
+    '--vc-card': '0 0% 100%',
+    '--vc-border': '220 13% 91%',
+    '--vc-muted': '220 14% 96%',
+    '--vc-muted-fg': '220 9% 46%',
+    '--vc-primary': a.p,
+    '--vc-soft': a.soft,
+    '--vc-tint': a.tint,
+  };
+  Object.entries(vars).forEach(([k,v]) => root.style.setProperty(k, v));
+  root.style.setProperty('--vc-font-sans', `'Inter', system-ui, -apple-system, sans-serif`);
+  root.style.setProperty('--vc-font-display', DISPLAY_FONTS[t.displayFont] || DISPLAY_FONTS['Instrument Serif']);
+}
+
+// ─── Tweaks panel ───────────────────────────────────────────
+function TweaksPanel({ value, onChange, visible }) {
+  if (!visible) return null;
+  const T = value;
+  const set = (k, v) => onChange({ ...T, [k]: v });
+  const Row = ({ label, children }) => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+      <div style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: 0.7, fontWeight: 600, color: '#7a7066' }}>{label}</div>
+      {children}
+    </div>
+  );
+  const Seg = ({ options, current, onPick }) => (
+    <div style={{ display: 'flex', gap: 4, padding: 3, background: '#efece5', borderRadius: 8 }}>
+      {options.map(o => (
+        <button key={o} onClick={() => onPick(o)} style={{
+          flex: 1, padding: '6px 8px', fontSize: 12, fontWeight: 500, border: 'none', cursor: 'pointer',
+          background: current === o ? '#fff' : 'transparent',
+          color: current === o ? '#1a1a1a' : '#7a7066',
+          borderRadius: 6,
+          boxShadow: current === o ? '0 1px 2px rgba(0,0,0,.08)' : 'none',
+          fontFamily: 'inherit',
+        }}>{o}</button>
+      ))}
+    </div>
+  );
+  return (
+    <div style={{
+      position: 'fixed', bottom: 20, right: 20, zIndex: 10000,
+      width: 280, background: '#fdfbf5', borderRadius: 14,
+      border: '1px solid rgba(0,0,0,.08)',
+      boxShadow: '0 20px 50px -10px rgba(0,0,0,.25)',
+      padding: 18, fontFamily: 'Inter, system-ui, sans-serif',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: '#1a1a1a' }}>Tweaks</div>
+        <div style={{ fontSize: 10.5, color: '#9a9088' }}>VisionCraft</div>
+      </div>
+      <Row label="Theme">
+        <Seg options={['light','dark']} current={T.theme} onPick={v => set('theme', v)}/>
+      </Row>
+      <Row label="Accent">
+        <div style={{ display: 'flex', gap: 6 }}>
+          {Object.keys(ACCENTS).map(k => {
+            const a = ACCENTS[k];
+            const active = T.accent === k;
+            return (
+              <button key={k} onClick={() => set('accent', k)} style={{
+                flex: 1, height: 36, padding: 0, cursor: 'pointer',
+                background: `hsl(${a.p})`, borderRadius: 8,
+                border: active ? '2px solid #1a1a1a' : '2px solid transparent',
+                color: '#fff', fontSize: 11, fontWeight: 600, textTransform: 'capitalize',
+                fontFamily: 'inherit',
+              }}>{k}</button>
+            );
+          })}
+        </div>
+      </Row>
+      <Row label="Display font">
+        <Seg options={Object.keys(DISPLAY_FONTS)} current={T.displayFont} onPick={v => set('displayFont', v)}/>
+      </Row>
+      <Row label="Density">
+        <Seg options={['comfortable','compact']} current={T.density} onPick={v => set('density', v)}/>
+      </Row>
+    </div>
+  );
+}
+
+// ─── App ────────────────────────────────────────────────────
+function App() {
+  const [tweaks, setTweaks] = React.useState(() => {
+    try { return { ...TWEAK_DEFAULTS, ...(JSON.parse(localStorage.getItem('vc-tweaks') || '{}')) }; }
+    catch { return TWEAK_DEFAULTS; }
+  });
+  const [editMode, setEditMode] = React.useState(false);
+
+  React.useEffect(() => { applyTheme(tweaks); }, [tweaks]);
+
+  React.useEffect(() => {
+    const onMsg = (e) => {
+      const d = e.data || {};
+      if (d.type === '__activate_edit_mode') setEditMode(true);
+      if (d.type === '__deactivate_edit_mode') setEditMode(false);
+    };
+    window.addEventListener('message', onMsg);
+    try { window.parent.postMessage({ type: '__edit_mode_available' }, '*'); } catch {}
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
+
+  const update = (t) => {
+    setTweaks(t);
+    try { localStorage.setItem('vc-tweaks', JSON.stringify(t)); } catch {}
+    try { window.parent.postMessage({ type: '__edit_mode_set_keys', edits: t }, '*'); } catch {}
+  };
+
+  const W = 1440, H = 900;
+  return (
+    <>
+      <DesignCanvas title="VisionCraft" subtitle="Phase 1 · 13 hi-fi screens">
+        <DCSection id="marketing" title="Marketing" subtitle="Public site">
+          <DCArtboard id="s01" label="01 · Landing" width={W} height={H}><Screen01Landing/></DCArtboard>
+        </DCSection>
+        <DCSection id="auth" title="Authentication" subtitle="Sign-up, login, email verification">
+          <DCArtboard id="s02" label="02 · Sign Up" width={W} height={H}><Screen02SignUp/></DCArtboard>
+          <DCArtboard id="s03" label="03 · Log In" width={W} height={H}><Screen03Login/></DCArtboard>
+          <DCArtboard id="s04" label="04 · Email Verify" width={W} height={H}><Screen04EmailVerify/></DCArtboard>
+        </DCSection>
+        <DCSection id="core" title="Core app" subtitle="Authenticated workspace">
+          <DCArtboard id="s05" label="05 · Dashboard" width={W} height={H}><Screen05Dashboard/></DCArtboard>
+          <DCArtboard id="s06" label="06 · Generate — Text" width={W} height={H}><Screen06Text2Img/></DCArtboard>
+          <DCArtboard id="s07" label="07 · Generate — Image" width={W} height={H}><Screen07Img2Img/></DCArtboard>
+          <DCArtboard id="s09" label="09 · Gallery" width={W} height={H}><Screen09Gallery/></DCArtboard>
+          <DCArtboard id="s10" label="10 · Image Detail" width={W} height={H}><Screen10Detail/></DCArtboard>
+          <DCArtboard id="s11" label="11 · Settings" width={W} height={H}><Screen11Profile/></DCArtboard>
+        </DCSection>
+        <DCSection id="genflow" title="Generation flow — industry patterns" subtitle="Modeled on what Midjourney, DALL·E, Krea & Leonardo actually ship">
+          <DCArtboard id="gA" label="A · Scan-reveal (DALL·E pattern)" width={W} height={H}><GenScanReveal/></DCArtboard>
+          <DCArtboard id="gB" label="B · Racing tiles (Midjourney pattern)" width={W} height={H}><GenTilesRacing/></DCArtboard>
+          <DCArtboard id="gC" label="C · Step viewer · live denoise + ETA (recommended)" width={W} height={H}><GenStepViewer/></DCArtboard>
+          <DCArtboard id="gD" label="D · History rail + ambient job" width={W} height={H}><GenHistoryRail/></DCArtboard>
+          <DCArtboard id="gE" label="E · Phase strip — direction C across all 5 phases" width={1600} height={680}><GenPhaseStrip/></DCArtboard>
+        </DCSection>
+        <DCSection id="influencers" title="Influencer face consistency" subtitle="Two-step creation flow + reference-image generation that locks identity across every gen">
+          <DCArtboard id="i1" label="I1 · Library (or empty state)" width={W} height={H}><InfLibrary/></DCArtboard>
+          <DCArtboard id="i2" label="I2 · Create — Step 1 · Define" width={W} height={H}><InfCreateForm/></DCArtboard>
+          <DCArtboard id="i3" label="I3 · Generating profile (DNA → seed → diffuse → ready)" width={W} height={H}><InfGeneratingProfile/></DCArtboard>
+          <DCArtboard id="i4" label="I4 · Create — Step 2 · Preview & save" width={W} height={H}><InfPreviewProfile/></DCArtboard>
+          <DCArtboard id="i5" label="I5 · Generate with influencer · referenceStrength slider" width={W} height={H}><InfGenerateWith/></DCArtboard>
+          <DCArtboard id="i6" label="I6 · Consistency proof — same face, 4 scenes" width={W} height={H}><InfConsistencyProof/></DCArtboard>
+        </DCSection>
+        <DCSection id="states" title="States & edge cases" subtitle="Loading, success, error, quota, 404">
+          <DCArtboard id="s08" label="08 · Generation states" width={W} height={H}><Screen08States/></DCArtboard>
+          <DCArtboard id="s12" label="12 · Quota modal" width={W} height={H}><Screen12QuotaModal/></DCArtboard>
+          <DCArtboard id="s13" label="13 · 404" width={W} height={H}><Screen13NotFound/></DCArtboard>
+        </DCSection>
+      </DesignCanvas>
+      <TweaksPanel value={tweaks} onChange={update} visible={editMode}/>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

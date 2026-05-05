@@ -48,6 +48,7 @@ class GenerateInfluencerRequest(BaseModel):
     use_int8: bool = False
     source_image_url: str | None = None
     reference_strength: float = 0.25
+    scene_image_url: str | None = None
 
 
 class GenerateInfluencerResponse(BaseModel):

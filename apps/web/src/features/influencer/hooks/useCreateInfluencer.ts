@@ -1,10 +1,43 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { getErrorMessage } from '../../../lib/errors';
-import { previewInfluencer, createInfluencer } from '../../../services/influencer.service';
+import {
+  previewInfluencer,
+  createInfluencer,
+  extractInfluencerDna,
+  generateInfluencerPreviewImage,
+} from '../../../services/influencer.service';
 import { track } from '../../../lib/analytics';
 import { useAuthStore } from '@ai-platform/store';
 import type { CharacterDna } from '@ai-platform/types';
+
+export function useExtractInfluencerDna() {
+  const { user } = useAuthStore();
+
+  return useMutation({
+    mutationFn: extractInfluencerDna,
+    onMutate: () => {
+      track({
+        event: 'influencer_preview_started',
+        influencerId: 'pending',
+        hasSourceImage: false,
+        userId: user?.id,
+      });
+    },
+    onError: (err) => {
+      toast.error(getErrorMessage(err));
+    },
+  });
+}
+
+export function useGeneratePreviewImage() {
+  return useMutation({
+    mutationFn: generateInfluencerPreviewImage,
+    onError: (err) => {
+      toast.error(getErrorMessage(err));
+    },
+  });
+}
 
 export function usePreviewInfluencer() {
   const { user } = useAuthStore();

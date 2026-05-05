@@ -18,7 +18,7 @@ from schemas.influencer import (
     GenerateInfluencerRequest,
     GenerateInfluencerResponse,
 )
-from services.influencer import extract_character_dna, build_anchored_prompt
+from services.influencer import extract_character_dna, build_anchored_prompt, build_profile_prompt
 from services.generation import generate_influencer_with_failover, upload_to_s3
 
 logger = logging.getLogger("ai-service")
@@ -88,19 +88,25 @@ async def generate_influencer(
 
     dna_dict = request.character_dna.model_dump()
 
-    anchored_prompt = build_anchored_prompt(
-        dna=dna_dict,
-        target_prompt=request.target_prompt,
-        emotion_modifier=request.emotion_modifier,
-        scene_params=request.scene_params,
-    )
+    # Profile/preview generations use only immutable physical traits — dynamic
+    # wardrobe and lighting are intentionally excluded so the reference shot is
+    # always a clean, neutral full-body portrait, not a copy of the source outfit.
+    if request.influencer_id == "preview":
+        anchored_prompt = build_profile_prompt(dna_dict)
+    else:
+        anchored_prompt = build_anchored_prompt(
+            dna=dna_dict,
+            target_prompt=request.target_prompt,
+            emotion_modifier=request.emotion_modifier,
+            scene_params=request.scene_params,
+        )
 
     logger.info(
         "anchored_prompt: job=%s len=%d preview=%.120s",
         request.job_id, len(anchored_prompt), anchored_prompt,
     )
 
-    # Fetch reference image bytes if a source URL is provided
+    # Fetch profile reference image bytes (for face lock)
     ref_bytes: bytes | None = None
     if request.source_image_url:
         try:
@@ -111,11 +117,23 @@ async def generate_influencer(
                 request.job_id, err,
             )
 
+    # Fetch optional scene image bytes (user-supplied reference for composition)
+    scene_bytes: bytes | None = None
+    if request.scene_image_url:
+        try:
+            scene_bytes = await _fetch_source_image(request.scene_image_url)
+        except Exception as err:
+            logger.warning(
+                "Failed to fetch scene image for job %s, proceeding without it: %s",
+                request.job_id, err,
+            )
+
     try:
         img_bytes, width, height, provider_name = await generate_influencer_with_failover(
             providers,
             prompt=anchored_prompt,
             ref_bytes=ref_bytes,
+            scene_bytes=scene_bytes,
             aspect_ratio=request.aspect_ratio,
             quality=request.quality,
             use_int8=request.use_int8,

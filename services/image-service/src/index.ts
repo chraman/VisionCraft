@@ -37,6 +37,20 @@ async function main(): Promise<void> {
   process.on('SIGINT', () => void shutdown('SIGINT'));
 }
 
+process.on('unhandledRejection', (reason) => {
+  logger.error('Unhandled promise rejection', {
+    action: 'unhandled_rejection',
+    error: reason instanceof Error ? reason.message : String(reason),
+  });
+  // Do not exit — log and continue so a single Redis blip doesn't kill the service
+});
+
+process.on('uncaughtException', (err) => {
+  logger.error('Uncaught exception', { action: 'uncaught_exception', error: err.message });
+  // For truly unexpected exceptions, exit so the process manager restarts cleanly
+  process.exit(1);
+});
+
 main().catch((err) => {
   logger.error('Failed to start image service', {
     action: 'startup_error',

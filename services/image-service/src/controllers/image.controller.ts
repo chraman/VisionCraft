@@ -141,9 +141,21 @@ export const imageController = {
             if (!res.writableEnded) res.write(': heartbeat\n\n');
           }, 30_000);
 
+          let cleanedUp = false;
           const cleanup = () => {
+            if (cleanedUp) return;
+            cleanedUp = true;
             clearInterval(heartbeat);
-            void subscriber.unsubscribe(channel).then(() => subscriber.disconnect());
+            subscriber
+              .unsubscribe(channel)
+              .catch(() => {})
+              .finally(() => {
+                try {
+                  subscriber.disconnect();
+                } catch {
+                  /* already closed */
+                }
+              });
             if (!res.writableEnded) res.end();
           };
 

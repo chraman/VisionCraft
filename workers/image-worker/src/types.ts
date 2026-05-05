@@ -17,6 +17,7 @@ export interface GenerationJobPayload {
   useInt8?: boolean;
   sourceImageUrl?: string;
   referenceStrength?: number;
+  sceneImageUrl?: string;
 }
 
 export interface JobStatusUpdate {

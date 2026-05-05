@@ -153,8 +153,8 @@ def build_anchored_prompt(
     """
     Construct the final generation prompt by injecting the DNA anchoring prefix.
 
-    Structure: {anchoring_prefix}{target_prompt}[, {emotion_modifier}]
-               [, {wardrobe}][, {lighting}][, {scene_params}]
+    Structure: {face_anchor}, {anchoring_prefix}, {target_prompt}
+               [, {emotion_modifier}][, {wardrobe}][, {lighting}][, {scene_params}]
     """
     parts = []
     if dna.get("face_anchor"):
@@ -174,3 +174,30 @@ def build_anchored_prompt(
         parts.append(scene_params.strip())
 
     return ", ".join(p.rstrip(", ") for p in parts if p)
+
+
+# Fixed profile prompt — appended to every profile-mode generation to override
+# any lighting/wardrobe drift that could come from the source image context.
+_PROFILE_SUFFIX = (
+    "simple fitted neutral clothing, plain light grey studio background, "
+    "soft even diffused lighting, full body head to toe, natural relaxed stance, "
+    "professional studio portrait, photorealistic, high detail"
+)
+
+
+def build_profile_prompt(dna: dict) -> str:
+    """
+    Prompt used exclusively for the canonical profile/preview image.
+
+    Intentionally omits dynamic.wardrobe and dynamic.lighting — those describe
+    the character's TYPICAL style, not the neutral reference shot. Using them
+    here causes the profile image to inherit the source image outfit (e.g. saree,
+    dark background) instead of a clean, readable full-body reference.
+    """
+    parts = []
+    if dna.get("face_anchor"):
+        parts.append(dna["face_anchor"])
+    if dna.get("anchoring_prefix"):
+        parts.append(dna["anchoring_prefix"].rstrip(", "))
+    parts.append(_PROFILE_SUFFIX)
+    return ", ".join(p for p in parts if p)

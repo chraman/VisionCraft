@@ -74,6 +74,8 @@ export const API_ROUTES = {
     LIST: '/api/v1/influencers',
     CREATE: '/api/v1/influencers',
     PREVIEW: '/api/v1/influencers/preview',
+    EXTRACT_DNA: '/api/v1/influencers/extract-dna',
+    PREVIEW_IMAGE: '/api/v1/influencers/preview-image',
     BY_ID: (id: string) => `/api/v1/influencers/${id}`,
     GENERATE: (id: string) => `/api/v1/influencers/${id}/generate`,
   },

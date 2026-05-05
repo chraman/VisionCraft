@@ -7,6 +7,8 @@ import {
   createInfluencerSchema,
   generateInfluencerSchema,
   listInfluencersSchema,
+  extractDnaSchema,
+  previewImageSchema,
 } from '../schemas/influencer.schemas';
 
 const logger = createLogger('image-service');
@@ -42,6 +44,47 @@ export const influencerController = {
     }
     logger.info('Previewing influencer', { action: 'influencer_preview', userId });
     const result = await influencerService.previewInfluencer(userId, parsed.data);
+    res.json({ success: true, data: result, requestId: reqId(res) });
+  },
+
+  async extractDna(req: Request, res: Response): Promise<void> {
+    const userId = getUserId(req);
+    const parsed = extractDnaSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: parsed.error.issues[0]?.message ?? 'Invalid input',
+        },
+        requestId: reqId(res),
+      });
+      return;
+    }
+    logger.info('Extracting influencer DNA', { action: 'influencer_extract_dna', userId });
+    const result = await influencerService.extractDna(userId, parsed.data);
+    res.json({ success: true, data: result, requestId: reqId(res) });
+  },
+
+  async previewImage(req: Request, res: Response): Promise<void> {
+    const userId = getUserId(req);
+    const parsed = previewImageSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: parsed.error.issues[0]?.message ?? 'Invalid input',
+        },
+        requestId: reqId(res),
+      });
+      return;
+    }
+    logger.info('Generating influencer preview image', {
+      action: 'influencer_preview_image',
+      userId,
+    });
+    const result = await influencerService.previewImage(userId, parsed.data);
     res.json({ success: true, data: result, requestId: reqId(res) });
   },
 

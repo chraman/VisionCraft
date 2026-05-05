@@ -18,6 +18,24 @@ influencerRouter.post('/preview', asyncHandler(influencerController.preview));
 
 /**
  * @openapi
+ * /api/v1/influencers/extract-dna:
+ *   post:
+ *     summary: Extract character DNA only (fast step — no image generated)
+ *     tags: [Influencers]
+ */
+influencerRouter.post('/extract-dna', asyncHandler(influencerController.extractDna));
+
+/**
+ * @openapi
+ * /api/v1/influencers/preview-image:
+ *   post:
+ *     summary: Generate a preview profile image from existing character DNA
+ *     tags: [Influencers]
+ */
+influencerRouter.post('/preview-image', asyncHandler(influencerController.previewImage));
+
+/**
+ * @openapi
  * /api/v1/influencers:
  *   post:
  *     summary: Save a confirmed influencer profile (requires pre-extracted DNA + profile image)

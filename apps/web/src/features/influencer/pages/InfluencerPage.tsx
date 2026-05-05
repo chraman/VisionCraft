@@ -30,8 +30,8 @@ export default function InfluencerPage() {
   }
 
   const tabs: { key: Tab; label: string }[] = [
-    { key: 'vault', label: 'Vault' },
-    { key: 'create', label: 'Create' },
+    { key: 'vault', label: 'Library' },
+    { key: 'create', label: 'New influencer' },
     { key: 'generate', label: 'Generate' },
   ];
 
@@ -43,10 +43,10 @@ export default function InfluencerPage() {
           <div className="font-display text-2xl font-medium tracking-[-0.5px]">Influencer</div>
           <div className="mt-0.5 text-[12.5px] text-muted-foreground">
             {activeTab === 'vault'
-              ? 'Your saved influencer personas'
+              ? 'Reusable characters that stay visually consistent across every generation'
               : activeTab === 'create'
-                ? 'Extract character DNA from a photo or description'
-                : 'Generate consistent images from a persona'}
+                ? 'Step 1 of 2 · Define the character'
+                : 'Influencer locked · generate consistent scenes'}
           </div>
         </div>
 
@@ -78,10 +78,10 @@ export default function InfluencerPage() {
         </div>
       )}
 
-      {/* Create tab — centered narrow form */}
+      {/* Create tab — centered form */}
       {activeTab === 'create' && (
-        <div className="flex flex-1 items-start justify-center overflow-auto p-8">
-          <div className="w-full max-w-[480px]">
+        <div className="flex flex-1 items-start justify-center overflow-auto p-8 bg-tint">
+          <div className="w-full max-w-[680px]">
             <CreateInfluencerForm
               onCreated={(influencer) => {
                 setSelectedInfluencerId(influencer.id);

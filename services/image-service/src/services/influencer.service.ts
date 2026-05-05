@@ -13,6 +13,8 @@ import type {
   CreateInfluencerInput,
   GenerateInfluencerInput,
   ListInfluencersInput,
+  ExtractDnaInput,
+  PreviewImageInput,
 } from '../schemas/influencer.schemas';
 
 export const influencerService = {
@@ -29,7 +31,7 @@ export const influencerService = {
           description: input.descriptionText ?? null,
           name: input.name,
         },
-        { timeout: 20_000 }
+        { timeout: 60_000 }
       );
     } catch (err) {
       if (axios.isAxiosError(err)) {
@@ -52,7 +54,7 @@ export const influencerService = {
           user_id: userId,
           influencer_id: 'preview',
           character_dna: characterDna,
-          target_prompt: 'full body portrait, professional photography, standing pose',
+          target_prompt: 'canonical profile image',
           model: 'sdxl',
           aspect_ratio: '9:16',
           quality: 'standard',
@@ -76,6 +78,65 @@ export const influencerService = {
     const profileImageUrl = toCdnUrl(imageKey);
 
     return { characterDna, profileImageUrl };
+  },
+
+  async extractDna(_userId: string, input: ExtractDnaInput) {
+    const aiServiceUrl = SERVICE_URLS.AI();
+    let extractResponse;
+    try {
+      extractResponse = await axios.post(
+        `${aiServiceUrl}/influencer/extract-dna`,
+        {
+          source_image_url: input.sourceImageUrl ?? null,
+          description: input.descriptionText ?? null,
+          name: input.name,
+        },
+        { timeout: 60_000 }
+      );
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        const detail = err.response?.data?.detail ?? err.response?.data?.message ?? err.message;
+        throw new AppError('PROVIDER_UNAVAILABLE', `DNA extraction failed: ${String(detail)}`, 503);
+      }
+      throw err;
+    }
+    return { characterDna: extractResponse.data.character_dna as Record<string, unknown> };
+  },
+
+  async previewImage(userId: string, input: PreviewImageInput) {
+    const aiServiceUrl = SERVICE_URLS.AI();
+    const profileJobId = `profile_${randomUUID()}`;
+    let generateResponse;
+    try {
+      generateResponse = await axios.post(
+        `${aiServiceUrl}/influencer/generate`,
+        {
+          job_id: profileJobId,
+          user_id: userId,
+          influencer_id: 'preview',
+          character_dna: input.characterDna,
+          target_prompt: 'canonical profile image',
+          model: 'sdxl',
+          aspect_ratio: '9:16',
+          quality: 'standard',
+          use_int8: false,
+          source_image_url: input.sourceImageUrl ?? null,
+        },
+        { timeout: 120_000 }
+      );
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        const detail = err.response?.data?.detail ?? err.response?.data?.message ?? err.message;
+        throw new AppError(
+          'PROVIDER_UNAVAILABLE',
+          `Profile image generation failed: ${String(detail)}`,
+          503
+        );
+      }
+      throw err;
+    }
+    const imageKey: string = generateResponse.data.image_key;
+    return { profileImageUrl: toCdnUrl(imageKey) };
   },
 
   async createInfluencer(userId: string, _tier: string, input: CreateInfluencerInput) {
@@ -131,6 +192,7 @@ export const influencerService = {
         useInt8: input.useInt8 ?? false,
         sourceImageUrl: influencer.profileImageUrl ?? undefined,
         referenceStrength,
+        sceneImageUrl: input.sceneImageUrl ?? undefined,
       },
     });
 
@@ -149,6 +211,7 @@ export const influencerService = {
       useInt8: input.useInt8 ?? false,
       sourceImageUrl: influencer.profileImageUrl ?? undefined,
       referenceStrength,
+      sceneImageUrl: input.sceneImageUrl ?? undefined,
     };
 
     await getRedis().set(

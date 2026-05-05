@@ -289,17 +289,25 @@ async def generate_influencer(
     seed:               int | None        = Form(None),
     reference_strength: float             = Form(0.25),
     reference_image:    UploadFile | None = File(None),
+    scene_image:        UploadFile | None = File(None),
 ) -> Response:
     """
     Multipart form fields:
-      anchored_prompt   string   required  — DNA-prefixed prompt from ai-service
-      aspect_ratio      string   optional
-      quality           string   optional
-      use_int8          string   optional  — "true"/"false" for bitsandbytes int8
-      seed              int      optional  — for reproducibility
-      reference_strength float   optional  — img2img strength (0.0–1.0)
-      reference_image   file     optional  — reference PNG; triggers img2img when present
+      anchored_prompt    string   required  — DNA-prefixed prompt from ai-service
+      aspect_ratio       string   optional
+      quality            string   optional
+      use_int8           string   optional  — "true"/"false" for bitsandbytes int8
+      seed               int      optional  — for reproducibility
+      reference_strength float    optional  — face lock img2img strength (0.0–1.0)
+      reference_image    file     optional  — influencer profile image (face reference)
+      scene_image        file     optional  — user reference scene image (composition)
     Returns: PNG bytes
+
+    Blending logic:
+      scene_image only        → img2img at strength=0.65, DNA text anchors identity
+      reference_image only    → img2img at strength=reference_strength (face lock)
+      both images             → blend 80% scene + 20% profile → img2img at strength=0.65
+      neither                 → text-to-image
     """
     pipe = models.get("pipe")
     if not pipe:
@@ -319,12 +327,41 @@ async def generate_influencer(
         width, height = ASPECT_TO_SIZE.get(aspect_ratio, (1024, 1024))
         steps = QUALITY_STEPS.get(quality, 4)
 
+        has_ref   = reference_image is not None
+        has_scene = scene_image is not None
+
         logger.info(
             f"Influencer generate | prompt={anchored_prompt[:60]!r} | {width}x{height} | "
-            f"steps={steps} | int8={use_int8_bool} | seed={seed_val} | ref={reference_image is not None}"
+            f"steps={steps} | int8={use_int8_bool} | seed={seed_val} | "
+            f"ref={has_ref} | scene={has_scene}"
         )
 
-        if reference_image:
+        if has_scene:
+            scene_bytes = await scene_image.read()
+            scene_pil = Image.open(io.BytesIO(scene_bytes)).convert("RGB")
+            scene_pil = resize_for_flux(scene_pil, width, height)
+
+            if has_ref:
+                # Both images: blend scene (80%) + profile face (20%) for composition + identity
+                ref_bytes = await reference_image.read()
+                ref_pil = Image.open(io.BytesIO(ref_bytes)).convert("RGB")
+                ref_pil = resize_for_flux(ref_pil, width, height)
+                input_pil = Image.blend(scene_pil, ref_pil, alpha=0.2)
+            else:
+                input_pil = scene_pil
+
+            with torch.inference_mode():
+                result = active_pipe(
+                    prompt=anchored_prompt,
+                    image=input_pil,
+                    strength=0.65,
+                    num_inference_steps=steps,
+                    guidance_scale=1.0,
+                    generator=generator,
+                )
+
+        elif has_ref:
+            # Profile only — face lock at user-specified strength
             ref_bytes = await reference_image.read()
             ref_pil = Image.open(io.BytesIO(ref_bytes)).convert("RGB")
             ref_pil = resize_for_flux(ref_pil, width, height)
@@ -337,7 +374,9 @@ async def generate_influencer(
                     guidance_scale=1.0,
                     generator=generator,
                 )
+
         else:
+            # Text-to-image fallback
             with torch.inference_mode():
                 result = active_pipe(
                     prompt=anchored_prompt,
