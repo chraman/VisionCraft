@@ -13,6 +13,7 @@ export type FeatureFlagKey =
   | 'image.upscaling.enabled'
   | 'image.inpainting.enabled'
   | 'image.video_generation.enabled'
+  | 'image.influencer.enabled'
   // AI
   | 'ai.model_selector.enabled'
   | 'ai.style_presets.enabled'

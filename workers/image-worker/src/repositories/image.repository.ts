@@ -10,6 +10,7 @@ export type CreateImageData = {
   provider: string;
   width?: number;
   height?: number;
+  influencerId?: string;
 };
 
 export const workerImageRepository = {
@@ -27,6 +28,7 @@ export const workerImageRepository = {
         width: data.width,
         height: data.height,
         isSaved: false,
+        influencerId: data.influencerId ?? null,
       },
       update: {
         url: data.url,

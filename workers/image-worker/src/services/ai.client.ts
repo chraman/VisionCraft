@@ -58,6 +58,53 @@ export async function callAiServiceText(payload: GenerationJobPayload): Promise<
   }
 }
 
+export async function callAiServiceInfluencer(
+  payload: GenerationJobPayload
+): Promise<AiServiceResponse> {
+  const url = `${aiServiceUrl()}/influencer/generate`;
+  const body = {
+    job_id: payload.jobId,
+    user_id: payload.userId,
+    influencer_id: payload.influencerId,
+    character_dna: payload.characterDna,
+    target_prompt: payload.prompt,
+    emotion_modifier: payload.emotionModifier ?? null,
+    scene_params: payload.sceneParams ?? null,
+    model: payload.model,
+    aspect_ratio: payload.aspectRatio,
+    quality: payload.quality,
+    use_int8: payload.useInt8 ?? false,
+  };
+
+  logger.info('Calling ai-service influencer', {
+    action: 'ai_request',
+    url,
+    jobId: payload.jobId,
+    influencerId: payload.influencerId,
+  });
+
+  try {
+    const response = await aiClient.post<AiServiceResponse>(url, body);
+    logger.info('ai-service influencer responded', {
+      action: 'ai_response',
+      jobId: payload.jobId,
+      status: response.status,
+      image_key: response.data.image_key,
+    });
+    return response.data;
+  } catch (err) {
+    const axErr = err as AxiosError;
+    logger.error('ai-service influencer call failed', {
+      action: 'ai_error',
+      jobId: payload.jobId,
+      status: axErr.response?.status,
+      responseData: JSON.stringify(axErr.response?.data),
+      message: axErr.message,
+    });
+    throw err;
+  }
+}
+
 export async function callAiServiceImage(
   payload: GenerationJobPayload
 ): Promise<AiServiceResponse> {

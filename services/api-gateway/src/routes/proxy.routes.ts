@@ -138,3 +138,6 @@ proxyRouter.get('/v1/images/jobs/:jobId/events', requireAuth, proxySSE(SERVICE_U
 
 // Image routes — JWT required (buffered proxy)
 proxyRouter.use('/v1/images', requireAuth, proxyTo(SERVICE_URLS.IMAGE));
+
+// Influencer routes — JWT required
+proxyRouter.use('/v1/influencers', requireAuth, proxyTo(SERVICE_URLS.IMAGE));

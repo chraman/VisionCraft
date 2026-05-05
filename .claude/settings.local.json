@@ -250,7 +250,12 @@
       "Bash(Sort-Object)",
       "Bash(Get-ChildItem -Path \"C:\\\\Projects\\\\VisionCraft\" -Force)",
       "Bash(Select-Object Name, PSIsContainer)",
-      "PowerShell(Get-ChildItem -Path \"C:\\\\Projects\\\\VisionCraft\\\\ai-service\" -Recurse -Force | Where-Object { $_.PSIsContainer -eq $false } | Select-Object -ExpandProperty FullName | Sort-Object)"
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Projects\\\\VisionCraft\\\\ai-service\" -Recurse -Force | Where-Object { $_.PSIsContainer -eq $false } | Select-Object -ExpandProperty FullName | Sort-Object)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Projects\\\\VisionCraft\" -Recurse -Directory -Filter \"image*\")",
+      "Bash(Get-ChildItem -Path \"C:\\\\Projects\\\\VisionCraft\\\\apps\\\\web\\\\src\" -Recurse -Directory)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Projects\\\\VisionCraft\" -Recurse -Depth 2)",
+      "Bash(Select-Object FullName)",
+      "Bash(npx prisma *)"
     ]
   }
 }

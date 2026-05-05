@@ -35,7 +35,13 @@ export type AnalyticsEventName =
   // Flags / A/B
   | 'flag_evaluated'
   | 'experiment_exposure'
-  | 'variant_assigned';
+  | 'variant_assigned'
+  // Influencer
+  | 'influencer_created'
+  | 'influencer_dna_extracted'
+  | 'influencer_generation_started'
+  | 'influencer_generation_completed'
+  | 'influencer_deleted';
 
 export interface BaseAnalyticsEvent {
   event: AnalyticsEventName;

@@ -37,6 +37,7 @@ _ai_logger.setLevel(logging.INFO)
 _ai_logger.propagate = True
 
 from routers.generation import router as generation_router  # noqa: E402
+from routers.influencer import router as influencer_router  # noqa: E402
 
 logger = logging.getLogger("ai-service")
 
@@ -63,6 +64,7 @@ async def log_every_request(request: Request, call_next):
 
 
 app.include_router(generation_router)
+app.include_router(influencer_router)
 
 
 @app.on_event("startup")

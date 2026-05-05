@@ -32,15 +32,15 @@ import subprocess, sys
 subprocess.run([
     sys.executable, "-m", "pip", "install", "-q",
     "fastapi", "uvicorn[standard]", "pyngrok",
-    "diffusers>=0.31.0", "transformers", "accelerate", "sentencepiece",
-    "safetensors", "Pillow",
+    "git+https://github.com/huggingface/diffusers.git",
+    "transformers", "accelerate", "sentencepiece",
+    "safetensors", "Pillow", "bitsandbytes",
 ], check=True)
 
 print("Dependencies installed.")
 
 # ─── Imports ──────────────────────────────────────────────────────────────────
 import os, io, gc, torch, asyncio, logging, threading, nest_asyncio
-import numpy as np
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -85,6 +85,21 @@ QUALITY_STEPS: dict[str, int] = {
 models: dict = {}
 
 
+def load_pipeline_int8():
+    """Load FLUX pipeline with bitsandbytes int8 quantization (~7-8 GB VRAM vs ~10-12 GB)."""
+    try:
+        import bitsandbytes  # noqa: F401
+        from diffusers import FluxPipeline
+        from transformers import BitsAndBytesConfig
+
+        bnb_config = BitsAndBytesConfig(load_in_8bit=True)
+        pipe = FluxPipeline.from_pretrained(MODEL_ID, quantization_config=bnb_config, device_map="auto")
+        return pipe
+    except ImportError as e:
+        logger.warning("bitsandbytes unavailable, skipping int8 pipeline: %s", e)
+        return None
+
+
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 def clear_vram() -> None:
@@ -118,30 +133,22 @@ async def lifespan(app: FastAPI):
     try:
         clear_vram()
 
-        from diffusers import Flux2KleinPipeline
+        # Flux2KleinPipeline was added in diffusers >0.36; fall back to the
+        # standard FluxPipeline which loads klein weights correctly on 0.31–0.36.
+        try:
+            from diffusers import Flux2KleinPipeline as _PipeClass
+            logger.info("Using Flux2KleinPipeline")
+        except ImportError:
+            from diffusers import FluxPipeline as _PipeClass
+            logger.info("Flux2KleinPipeline not found in this diffusers version; using FluxPipeline")
 
-        pipe = Flux2KleinPipeline.from_pretrained(
+        pipe = _PipeClass.from_pretrained(
             MODEL_ID,
-            torch_dtype=torch.float16,
+            torch_dtype=torch.bfloat16,
         )
         pipe.enable_model_cpu_offload()
         pipe.vae.enable_tiling()
         models["pipe"] = pipe
-
-        # Try to load a true img2img pipeline by reusing the already-loaded
-        # transformer/VAE/tokenizer — from_pipe() shares weights so no extra VRAM.
-        # Flux2KleinPipeline uses a single T5 encoder; FluxImg2ImgPipeline may
-        # expect both T5 + CLIP. We attempt it and fall back gracefully.
-        try:
-            from diffusers import FluxImg2ImgPipeline
-            img2img_pipe = FluxImg2ImgPipeline.from_pipe(pipe)
-            models["img2img"] = img2img_pipe
-            logger.info("🖼️  FluxImg2ImgPipeline loaded — true img2img enabled.")
-        except Exception as ex:
-            logger.warning(
-                "⚠️  FluxImg2ImgPipeline not compatible with this checkpoint (%s); "
-                "img2img will use pixel-blend fallback.", ex
-            )
 
         logger.info("🚀 FLUX.2 [klein] server ready.")
 
@@ -251,53 +258,73 @@ async def generate_image(
         )
         source_img = resize_for_flux(source_img, target_w, target_h)
 
-        img2img_pipe = models.get("img2img")
-
-        if img2img_pipe:
-            # True FLUX img2img — source image conditions the denoising process
-            steps = max(4, round(10 * strength))
-            logger.info(
-                f"Img2img (FLUX native) | prompt={prompt[:60]!r} | "
-                f"strength={strength:.2f} | {target_w}x{target_h} | steps={steps}"
+        steps = max(4, round(10 * strength))
+        logger.info(
+            f"Img2img | prompt={prompt[:60]!r} | "
+            f"strength={strength:.2f} | {target_w}x{target_h} | steps={steps}"
+        )
+        with torch.inference_mode():
+            result = models["pipe"](
+                prompt=prompt,
+                image=source_img,
+                strength=strength,
+                num_inference_steps=steps,
+                guidance_scale=1.0,
             )
-            with torch.inference_mode():
-                result = img2img_pipe(
-                    prompt=prompt,
-                    image=source_img,
-                    strength=strength,
-                    num_inference_steps=steps,
-                    guidance_scale=1.0,
-                )
-            out_img = result.images[0]
-
-        else:
-            # Blend fallback: run text2img at source dimensions, then composite
-            # generated pixels with source pixels weighted by strength.
-            # strength=1.0 → fully generated; strength=0.1 → mostly original.
-            steps = max(4, round(8 * strength))
-            logger.info(
-                f"Img2img (blend) | prompt={prompt[:60]!r} | "
-                f"strength={strength:.2f} | {target_w}x{target_h} | steps={steps}"
-            )
-            with torch.inference_mode():
-                result = models["pipe"](
-                    prompt=prompt,
-                    width=target_w,
-                    height=target_h,
-                    num_inference_steps=steps,
-                    guidance_scale=1.0,
-                )
-            gen_arr = np.array(result.images[0]).astype(float)
-            src_arr = np.array(source_img).astype(float)
-            blended = np.clip(
-                strength * gen_arr + (1.0 - strength) * src_arr, 0, 255
-            ).astype(np.uint8)
-            out_img = Image.fromarray(blended)
+        out_img = result.images[0]
 
         return png_response(out_img)
 
     except Exception as e:
         logger.error(f"❌ Img2img error: {e}", exc_info=True)
+        return Response(status_code=500, content=str(e))
+
+
+@app.post("/influencer/generate")
+async def generate_influencer(request: Request) -> Response:
+    """
+    Body (JSON):
+      anchored_prompt  string   required  — DNA-prefixed prompt from ai-service
+      aspect_ratio     string   optional
+      quality          string   optional
+      use_int8         bool     optional  — use bitsandbytes int8 quantization
+    Returns: PNG bytes
+    """
+    pipe = models.get("pipe")
+    if not pipe:
+        return Response(status_code=503, content="Model not loaded.")
+
+    try:
+        body         = await request.json()
+        prompt       = str(body.get("anchored_prompt", ""))
+        aspect_ratio = str(body.get("aspect_ratio", "1:1"))
+        quality      = str(body.get("quality", "standard"))
+        use_int8     = bool(body.get("use_int8", False))
+        width, height = ASPECT_TO_SIZE.get(aspect_ratio, (1024, 1024))
+        steps         = QUALITY_STEPS.get(quality, 4)
+
+        logger.info(f"Influencer generate | prompt={prompt[:60]!r} | {width}x{height} | steps={steps} | int8={use_int8}")
+
+        active_pipe = pipe
+        if use_int8:
+            int8_pipe = load_pipeline_int8()
+            if int8_pipe:
+                active_pipe = int8_pipe
+                logger.info("Using int8-quantized pipeline for influencer generation")
+
+        with torch.inference_mode():
+            result = active_pipe(
+                prompt=prompt,
+                width=width,
+                height=height,
+                num_inference_steps=steps,
+                guidance_scale=1.0,
+            )
+
+        return png_response(result.images[0])
+
+    except Exception as e:
+        logger.error(f"Influencer generate error: {e}", exc_info=True)
         return Response(status_code=500, content=str(e))
 
 

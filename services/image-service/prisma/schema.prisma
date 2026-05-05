@@ -42,6 +42,7 @@ enum GenerationJobType {
   UPSCALE
   INPAINT
   VIDEO
+  INFLUENCER
 }
 
 enum AuditAction {
@@ -77,6 +78,10 @@ model User {
   isTwoFactorEnabled Boolean   @default(false)
   totpSecret         String?
 
+  // OAuth
+  oauthProvider   String?
+  oauthProviderId String?
+
   // Quota tracking
   generationsThisMonth Int      @default(0)
   quotaResetAt         DateTime @default(now())
@@ -97,17 +102,19 @@ model User {
   deletedAt DateTime?
 
   // Relations
-  authTokens    AuthToken[]
-  images        Image[]
-  generationJobs GenerationJob[]
-  savedImages   SavedImage[]
-  collections   Collection[]
-  auditLogs     AuditLog[]
+  authTokens      AuthToken[]
+  images          Image[]
+  generationJobs  GenerationJob[]
+  savedImages     SavedImage[]
+  collections     Collection[]
+  auditLogs       AuditLog[]
   analyticsEvents AnalyticsEvent[]
+  influencers     Influencer[]
 
   @@index([email])
   @@index([tier])
   @@index([deletedAt])
+  @@unique([oauthProvider, oauthProviderId])
   @@map("users")
 }
 
@@ -156,6 +163,7 @@ model Image {
   width        Int?    // Phase 2
   height       Int?    // Phase 2
   collectionId String? // image collections
+  influencerId String? // image.influencer.enabled
 
   version  Int  @default(1)
   metadata Json?
@@ -164,10 +172,11 @@ model Image {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  user       User       @relation(fields: [userId], references: [id])
-  job        GenerationJob @relation(fields: [jobId], references: [id])
+  user        User          @relation(fields: [userId], references: [id])
+  job         GenerationJob @relation(fields: [jobId], references: [id])
   savedImages SavedImage[]
-  collection Collection? @relation(fields: [collectionId], references: [id])
+  collection  Collection?   @relation(fields: [collectionId], references: [id])
+  influencer  Influencer?   @relation(fields: [influencerId], references: [id])
 
   @@index([userId])
   @@index([userId, createdAt])
@@ -191,9 +200,10 @@ model GenerationJob {
   startedAt      DateTime?
   completedAt    DateTime?
 
-  // Phase 2 batch reserved columns (CLAUDE.md §7.2)
-  batchId     String? // image.batch_generation.enabled
-  parentJobId String? // image.batch_generation.enabled
+  // Phase 2 reserved columns (CLAUDE.md §7.2)
+  batchId      String? // image.batch_generation.enabled
+  parentJobId  String? // image.batch_generation.enabled
+  influencerId String? // image.influencer.enabled
 
   version  Int  @default(1)
   metadata Json?
@@ -202,8 +212,9 @@ model GenerationJob {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  user  User   @relation(fields: [userId], references: [id])
-  image Image?
+  user       User        @relation(fields: [userId], references: [id])
+  image      Image?
+  influencer Influencer? @relation(fields: [influencerId], references: [id])
 
   @@index([userId])
   @@index([status])
@@ -235,6 +246,34 @@ model Collection {
   @@index([userId])
   @@index([deletedAt])
   @@map("collections")
+}
+
+// ─── Influencers (Phase 2 — image.influencer.enabled) ────────────────────────
+
+model Influencer {
+  id             String   @id @default(cuid())
+  userId         String
+  name           String
+  description    String?
+  sourceImageUrl String?
+  characterDna   Json
+  isPublic       Boolean  @default(false)
+
+  version  Int  @default(1)
+  metadata Json?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  user           User            @relation(fields: [userId], references: [id])
+  generationJobs GenerationJob[]
+  images         Image[]
+
+  @@index([userId])
+  @@index([userId, createdAt])
+  @@index([deletedAt])
+  @@map("influencers")
 }
 
 // ─── Saved Images ─────────────────────────────────────────────────────────────

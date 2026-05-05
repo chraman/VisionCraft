@@ -1,7 +1,7 @@
 export interface GenerationJobPayload {
   jobId: string;
   userId: string;
-  type: 'TEXT2IMG' | 'IMG2IMG';
+  type: 'TEXT2IMG' | 'IMG2IMG' | 'INFLUENCER';
   prompt: string;
   negativePrompt?: string;
   model: string;
@@ -9,6 +9,12 @@ export interface GenerationJobPayload {
   quality: string;
   imageUrls?: string[]; // IMG2IMG — S3 keys in uploads bucket
   strength?: number; // IMG2IMG
+  // INFLUENCER
+  influencerId?: string;
+  characterDna?: Record<string, unknown>;
+  emotionModifier?: string;
+  sceneParams?: string;
+  useInt8?: boolean;
 }
 
 export interface JobStatusUpdate {

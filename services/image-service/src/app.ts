@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import { requestId } from './middleware/requestId';
 import { errorHandler } from './middleware/errorHandler';
 import { imageRouter } from './routes/image.routes';
+import { influencerRouter } from './routes/influencer.routes';
 
 export function createApp(): express.Express {
   const app = express();
@@ -30,6 +31,7 @@ export function createApp(): express.Express {
   });
 
   app.use('/api/v1/images', imageRouter);
+  app.use('/api/v1/influencers', influencerRouter);
 
   app.use((_req, res) => {
     res

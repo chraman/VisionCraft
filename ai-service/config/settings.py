@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     augmentation_rag_enabled: bool = False
     augmentation_rag_top_k: int = 3
 
+    # Influencer DNA extraction
+    influencer_extraction_timeout_seconds: float = 15.0
+
     # App
     port: int = 8000
     service_name: str = "ai-service"

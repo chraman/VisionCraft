@@ -17,6 +17,7 @@ const EmailVerifyPage = lazy(() => import('../features/auth/pages/EmailVerifyPag
 const GeneratePage = lazy(() => import('../features/generate/pages/GeneratePage'));
 const GalleryPage = lazy(() => import('../features/gallery/pages/GalleryPage'));
 const ProfilePage = lazy(() => import('../features/profile/pages/ProfilePage'));
+const InfluencerPage = lazy(() => import('../features/influencer/pages/InfluencerPage'));
 
 function withSuspense(element: React.ReactNode) {
   return <Suspense fallback={<PageLoader />}>{element}</Suspense>;
@@ -59,6 +60,10 @@ export const router = createBrowserRouter([
           { path: '/dashboard', element: withSuspense(<DashboardPage />) },
           { path: '/generate', element: withSuspense(<GeneratePage />) },
           { path: '/gallery', element: withSuspense(<GalleryPage />) },
+          {
+            element: <ProtectedRoute flag="image.influencer.enabled" redirectTo="/generate" />,
+            children: [{ path: '/influencer', element: withSuspense(<InfluencerPage />) }],
+          },
           { path: '/profile', element: withSuspense(<ProfilePage />) },
         ],
       },

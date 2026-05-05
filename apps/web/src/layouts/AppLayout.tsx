@@ -46,6 +46,14 @@ function Icon({
         <path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8" />
       </>
     ),
+    influencer: (
+      <>
+        <circle cx="12" cy="7" r="4" />
+        <path d="M4 21c0-5 3.6-9 8-9s8 4 8 9" />
+        <circle cx="19" cy="17" r="2.5" />
+        <path d="M19 14.5v1M19 19.5v1M16.5 17h1M21.5 17h1" />
+      </>
+    ),
     logout: (
       <>
         <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -102,6 +110,7 @@ const NAV_ITEMS = [
   { to: '/dashboard', icon: 'dashboard', label: 'Dashboard' },
   { to: '/generate', icon: 'sparkle', label: 'Generate' },
   { to: '/gallery', icon: 'gallery', label: 'Gallery' },
+  { to: '/influencer', icon: 'influencer', label: 'Influencer' },
   { to: '/profile', icon: 'user', label: 'Settings' },
 ];
 

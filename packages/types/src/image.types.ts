@@ -1,6 +1,12 @@
 export type JobStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
 
-export type GenerationJobType = 'TEXT2IMG' | 'IMG2IMG' | 'UPSCALE' | 'INPAINT' | 'VIDEO';
+export type GenerationJobType =
+  | 'TEXT2IMG'
+  | 'IMG2IMG'
+  | 'UPSCALE'
+  | 'INPAINT'
+  | 'VIDEO'
+  | 'INFLUENCER';
 
 export type AspectRatio = '1:1' | '16:9' | '9:16' | '4:3' | '3:4';
 
@@ -21,6 +27,7 @@ export interface Image {
   seed: number | null;
   stylePreset: string | null;
   collectionId: string | null;
+  influencerId: string | null;
   isSaved: boolean;
   metadata: Record<string, unknown> | null;
   createdAt: string;
@@ -41,9 +48,10 @@ export interface GenerationJob {
   imageId: string | null;
   cdnUrl: string | null;
   errorMessage: string | null;
-  // Reserved for Phase 2 batch generation
+  // Reserved for Phase 2
   batchId: string | null;
   parentJobId: string | null;
+  influencerId: string | null;
   startedAt: string | null;
   completedAt: string | null;
   metadata: Record<string, unknown> | null;

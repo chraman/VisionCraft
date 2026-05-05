@@ -5,7 +5,11 @@ import { getRedis, getBullMQRedis } from './lib/redis';
 import { workerJobRepository } from './repositories/job.repository';
 import { workerImageRepository } from './repositories/image.repository';
 import { workerUserRepository } from './repositories/user.repository';
-import { callAiServiceText, callAiServiceImage } from './services/ai.client';
+import {
+  callAiServiceText,
+  callAiServiceImage,
+  callAiServiceInfluencer,
+} from './services/ai.client';
 import { publishJobStatus } from './services/sse.publisher';
 import type { GenerationJobPayload } from './types';
 
@@ -39,8 +43,16 @@ async function processJob(job: Job<GenerationJobPayload>): Promise<void> {
   });
 
   try {
-    const result =
-      type === 'TEXT2IMG' ? await callAiServiceText(job.data) : await callAiServiceImage(job.data);
+    let result;
+    if (type === 'TEXT2IMG') {
+      result = await callAiServiceText(job.data);
+    } else if (type === 'IMG2IMG') {
+      result = await callAiServiceImage(job.data);
+    } else if (type === 'INFLUENCER') {
+      result = await callAiServiceInfluencer(job.data);
+    } else {
+      throw new Error(`Unknown job type: ${type as string}`);
+    }
 
     const imageS3Url = s3Url(result.image_key);
     const imageCdnUrl = toCdnUrl(result.image_key);
@@ -57,6 +69,7 @@ async function processJob(job: Job<GenerationJobPayload>): Promise<void> {
       provider: result.provider,
       width: result.width,
       height: result.height,
+      influencerId: job.data.influencerId,
     });
 
     await workerJobRepository.markCompleted(jobId);

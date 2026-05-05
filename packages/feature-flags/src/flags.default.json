@@ -5,6 +5,7 @@
   "image.upscaling.enabled": false,
   "image.inpainting.enabled": false,
   "image.video_generation.enabled": false,
+  "image.influencer.enabled": true,
   "ai.model_selector.enabled": false,
   "ai.style_presets.enabled": false,
   "ai.safety_check.enabled": false,

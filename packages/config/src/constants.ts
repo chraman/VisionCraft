@@ -11,7 +11,7 @@ export const SERVICE_PORTS = {
   IMAGE: 3003,
   NOTIFY: 3004,
   ANALYTICS: 3005,
-  AI: 8000,
+  AI: 8001,
   FRONTEND: 5173,
 } as const;
 
@@ -68,6 +68,13 @@ export const API_ROUTES = {
     SAVE: (id: string) => `/api/v1/images/${id}/save`,
     JOB: (id: string) => `/api/v1/images/jobs/${id}`,
     JOB_EVENTS: (id: string) => `/api/v1/images/jobs/${id}/events`,
+  },
+  // Influencers
+  INFLUENCERS: {
+    LIST: '/api/v1/influencers',
+    CREATE: '/api/v1/influencers',
+    BY_ID: (id: string) => `/api/v1/influencers/${id}`,
+    GENERATE: (id: string) => `/api/v1/influencers/${id}/generate`,
   },
   // Notifications
   NOTIFY: {
