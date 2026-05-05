@@ -19,6 +19,8 @@ class CharacterDnaSchema(BaseModel):
     anchoring_prefix: str
     extracted_at: str
     extraction_model: str
+    face_anchor: str | None = None
+    seed: int | None = None
 
 
 class ExtractDnaRequest(BaseModel):
@@ -44,6 +46,8 @@ class GenerateInfluencerRequest(BaseModel):
     aspect_ratio: str = "1:1"
     quality: str = "standard"
     use_int8: bool = False
+    source_image_url: str | None = None
+    reference_strength: float = 0.25
 
 
 class GenerateInfluencerResponse(BaseModel):

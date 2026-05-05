@@ -40,7 +40,7 @@ subprocess.run([
 print("Dependencies installed.")
 
 # ─── Imports ──────────────────────────────────────────────────────────────────
-import os, io, gc, torch, asyncio, logging, threading, nest_asyncio
+import os, io, gc, torch, asyncio, logging, random, threading, nest_asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -281,13 +281,24 @@ async def generate_image(
 
 
 @app.post("/influencer/generate")
-async def generate_influencer(request: Request) -> Response:
+async def generate_influencer(
+    anchored_prompt:    str               = Form(...),
+    aspect_ratio:       str               = Form("1:1"),
+    quality:            str               = Form("standard"),
+    use_int8:           str               = Form("false"),
+    seed:               int | None        = Form(None),
+    reference_strength: float             = Form(0.25),
+    reference_image:    UploadFile | None = File(None),
+) -> Response:
     """
-    Body (JSON):
-      anchored_prompt  string   required  — DNA-prefixed prompt from ai-service
-      aspect_ratio     string   optional
-      quality          string   optional
-      use_int8         bool     optional  — use bitsandbytes int8 quantization
+    Multipart form fields:
+      anchored_prompt   string   required  — DNA-prefixed prompt from ai-service
+      aspect_ratio      string   optional
+      quality           string   optional
+      use_int8          string   optional  — "true"/"false" for bitsandbytes int8
+      seed              int      optional  — for reproducibility
+      reference_strength float   optional  — img2img strength (0.0–1.0)
+      reference_image   file     optional  — reference PNG; triggers img2img when present
     Returns: PNG bytes
     """
     pipe = models.get("pipe")
@@ -295,31 +306,47 @@ async def generate_influencer(request: Request) -> Response:
         return Response(status_code=503, content="Model not loaded.")
 
     try:
-        body         = await request.json()
-        prompt       = str(body.get("anchored_prompt", ""))
-        aspect_ratio = str(body.get("aspect_ratio", "1:1"))
-        quality      = str(body.get("quality", "standard"))
-        use_int8     = bool(body.get("use_int8", False))
-        width, height = ASPECT_TO_SIZE.get(aspect_ratio, (1024, 1024))
-        steps         = QUALITY_STEPS.get(quality, 4)
-
-        logger.info(f"Influencer generate | prompt={prompt[:60]!r} | {width}x{height} | steps={steps} | int8={use_int8}")
-
+        use_int8_bool = use_int8.lower() == "true"
         active_pipe = pipe
-        if use_int8:
+        if use_int8_bool:
             int8_pipe = load_pipeline_int8()
             if int8_pipe:
                 active_pipe = int8_pipe
                 logger.info("Using int8-quantized pipeline for influencer generation")
 
-        with torch.inference_mode():
-            result = active_pipe(
-                prompt=prompt,
-                width=width,
-                height=height,
-                num_inference_steps=steps,
-                guidance_scale=1.0,
-            )
+        seed_val = seed if seed is not None else random.randint(0, 2 ** 32 - 1)
+        generator = torch.Generator("cpu").manual_seed(seed_val)
+        width, height = ASPECT_TO_SIZE.get(aspect_ratio, (1024, 1024))
+        steps = QUALITY_STEPS.get(quality, 4)
+
+        logger.info(
+            f"Influencer generate | prompt={anchored_prompt[:60]!r} | {width}x{height} | "
+            f"steps={steps} | int8={use_int8_bool} | seed={seed_val} | ref={reference_image is not None}"
+        )
+
+        if reference_image:
+            ref_bytes = await reference_image.read()
+            ref_pil = Image.open(io.BytesIO(ref_bytes)).convert("RGB")
+            ref_pil = resize_for_flux(ref_pil, width, height)
+            with torch.inference_mode():
+                result = active_pipe(
+                    prompt=anchored_prompt,
+                    image=ref_pil,
+                    strength=reference_strength,
+                    num_inference_steps=steps,
+                    guidance_scale=1.0,
+                    generator=generator,
+                )
+        else:
+            with torch.inference_mode():
+                result = active_pipe(
+                    prompt=anchored_prompt,
+                    width=width,
+                    height=height,
+                    num_inference_steps=steps,
+                    guidance_scale=1.0,
+                    generator=generator,
+                )
 
         return png_response(result.images[0])
 

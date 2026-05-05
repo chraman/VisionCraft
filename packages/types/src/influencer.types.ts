@@ -16,6 +16,8 @@ export interface CharacterDna {
   anchoring_prefix: string;
   extracted_at: string;
   extraction_model: string;
+  face_anchor?: string;
+  seed?: number;
 }
 
 export interface Influencer {
@@ -24,6 +26,7 @@ export interface Influencer {
   name: string;
   description: string | null;
   sourceImageUrl: string | null;
+  profileImageUrl: string | null;
   characterDna: CharacterDna;
   isPublic: boolean;
   metadata: Record<string, unknown> | null;
@@ -49,4 +52,17 @@ export interface GenerateInfluencerRequest {
   aspectRatio?: string;
   quality?: string;
   useInt8?: boolean;
+  referenceStrength?: number;
+}
+
+export interface PreviewInfluencerRequest {
+  name: string;
+  description?: string;
+  sourceImageUrl?: string;
+  descriptionText?: string;
+}
+
+export interface PreviewInfluencerResponse {
+  characterDna: CharacterDna;
+  profileImageUrl: string;
 }

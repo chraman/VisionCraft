@@ -79,3 +79,42 @@ class LocalProvider(BaseProvider):
             actual_w, actual_h = w, h
 
         return result_bytes, actual_w, actual_h
+
+    async def generate_influencer_img2img(
+        self,
+        prompt: str,
+        ref_bytes: bytes,
+        aspect_ratio: str,
+        quality: str,
+        use_int8: bool,
+        seed: int | None,
+        reference_strength: float,
+    ) -> tuple[bytes, int, int]:
+        w, h = ASPECT_RATIO_TO_SIZE.get(aspect_ratio, (1024, 1024))
+
+        data: dict = {
+            "anchored_prompt": prompt,
+            "aspect_ratio": aspect_ratio,
+            "quality": quality,
+            "use_int8": str(use_int8).lower(),
+            "reference_strength": str(reference_strength),
+        }
+        if seed is not None:
+            data["seed"] = str(seed)
+
+        async with httpx.AsyncClient(timeout=300) as client:
+            response = await client.post(
+                f"{self._base()}/influencer/generate",
+                data=data,
+                files={"reference_image": ("ref.png", io.BytesIO(ref_bytes), "image/png")},
+            )
+            response.raise_for_status()
+            result_bytes = response.content
+
+        try:
+            img = PILImage.open(io.BytesIO(result_bytes))
+            actual_w, actual_h = img.size
+        except Exception:
+            actual_w, actual_h = w, h
+
+        return result_bytes, actual_w, actual_h

@@ -73,6 +73,45 @@ async def generate_image_with_failover(
     raise ProviderUnavailableError(f"All providers failed. Last: {last_err}")
 
 
+async def generate_influencer_with_failover(
+    providers: list[BaseProvider],
+    prompt: str,
+    ref_bytes: bytes | None,
+    aspect_ratio: str,
+    quality: str,
+    use_int8: bool,
+    seed: int | None,
+    reference_strength: float,
+) -> tuple[bytes, int, int, str]:
+    if ref_bytes is None:
+        return await generate_text_with_failover(providers, prompt, None, aspect_ratio, quality)
+
+    from providers.local_provider import LocalProvider
+
+    last_err: Exception | None = None
+    for provider in providers:
+        _log(f"[ai-service] influencer img2img trying provider={provider.name}")
+        try:
+            if isinstance(provider, LocalProvider):
+                img_bytes, w, h = await provider.generate_influencer_img2img(
+                    prompt, ref_bytes, aspect_ratio, quality, use_int8, seed, reference_strength
+                )
+            else:
+                img_bytes, w, h = await provider.generate_image(
+                    ref_bytes, prompt, reference_strength, aspect_ratio
+                )
+            _log(f"[ai-service] influencer img2img provider={provider.name} succeeded size={w}x{h}")
+            return img_bytes, w, h, provider.name
+        except NotImplementedError:
+            _log(f"[ai-service] influencer img2img provider={provider.name} skipped (NotImplemented)")
+            continue
+        except Exception as err:
+            _err(f"[ai-service] influencer img2img provider={provider.name} failed: {err}")
+            last_err = err
+
+    raise ProviderUnavailableError(f"All providers failed. Last: {last_err}")
+
+
 def upload_to_s3(image_bytes: bytes, job_id: str, user_id: str) -> str:
     if not settings.aws_bucket_generated:
         raise RuntimeError("AWS_BUCKET_GENERATED is not configured")

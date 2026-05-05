@@ -15,6 +15,8 @@ export interface GenerationJobPayload {
   emotionModifier?: string;
   sceneParams?: string;
   useInt8?: boolean;
+  sourceImageUrl?: string;
+  referenceStrength?: number;
 }
 
 export interface JobStatusUpdate {

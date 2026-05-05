@@ -74,6 +74,8 @@ export async function callAiServiceInfluencer(
     aspect_ratio: payload.aspectRatio,
     quality: payload.quality,
     use_int8: payload.useInt8 ?? false,
+    source_image_url: payload.sourceImageUrl ?? null,
+    reference_strength: payload.referenceStrength ?? 0.25,
   };
 
   logger.info('Calling ai-service influencer', {

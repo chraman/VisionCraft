@@ -4,17 +4,31 @@ import type {
   Influencer,
   ExtractDnaRequest,
   GenerateInfluencerRequest,
+  PreviewInfluencerRequest,
+  PreviewInfluencerResponse,
   GenerateJobResponse,
   PaginatedResponse,
   CursorPaginationParams,
 } from '@ai-platform/types';
 
-export async function createInfluencer(
-  req: Pick<ExtractDnaRequest, 'name' | 'description'> & {
-    sourceImageUrl?: string;
-    descriptionText?: string;
-  }
-): Promise<Influencer> {
+export async function previewInfluencer(
+  req: PreviewInfluencerRequest
+): Promise<PreviewInfluencerResponse> {
+  const res = await apiClient.post<{
+    success: true;
+    data: PreviewInfluencerResponse;
+    requestId: string;
+  }>(API_ROUTES.INFLUENCERS.PREVIEW, req);
+  return unwrapResponse(res);
+}
+
+export async function createInfluencer(req: {
+  name: string;
+  description?: string;
+  sourceImageUrl?: string;
+  characterDna: Record<string, unknown>;
+  profileImageUrl: string;
+}): Promise<Influencer> {
   const res = await apiClient.post<{ success: true; data: Influencer; requestId: string }>(
     API_ROUTES.INFLUENCERS.CREATE,
     req
@@ -30,7 +44,6 @@ export async function listInfluencers(
     data: { data: Influencer[]; pagination: PaginatedResponse<Influencer>['pagination'] };
     requestId: string;
   }>(API_ROUTES.INFLUENCERS.LIST, { params });
-  // image-service returns { data: items[], pagination: {...} } inside the envelope
   const envelope = unwrapResponse(res) as unknown as {
     data: Influencer[];
     pagination: PaginatedResponse<Influencer>['pagination'];

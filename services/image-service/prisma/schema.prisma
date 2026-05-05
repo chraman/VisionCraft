@@ -255,9 +255,10 @@ model Influencer {
   userId         String
   name           String
   description    String?
-  sourceImageUrl String?
-  characterDna   Json
-  isPublic       Boolean  @default(false)
+  sourceImageUrl  String?
+  profileImageUrl String?
+  characterDna    Json
+  isPublic        Boolean  @default(false)
 
   version  Int  @default(1)
   metadata Json?
