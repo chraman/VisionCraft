@@ -22,8 +22,9 @@ from services.generation import (
 
 
 class DescribeSceneRequest(BaseModel):
-    image_base64: str
+    image_base64: str | None = None
     mime_type: str = "image/jpeg"
+    image_url: str | None = None
 
 
 class DescribeSceneResponse(BaseModel):
@@ -217,7 +218,16 @@ async def describe_scene(request: DescribeSceneRequest) -> DescribeSceneResponse
         import PIL.Image
         import google.generativeai as genai  # type: ignore[import]
 
-        image_bytes = base64.b64decode(request.image_base64)
+        if request.image_url:
+            async with httpx.AsyncClient(timeout=60) as client:
+                resp = await client.get(request.image_url)
+                resp.raise_for_status()
+                image_bytes = resp.content
+        elif request.image_base64:
+            image_bytes = base64.b64decode(request.image_base64)
+        else:
+            raise HTTPException(status_code=422, detail="Provide image_base64 or image_url")
+
         pil_image = PIL.Image.open(io.BytesIO(image_bytes))
 
         genai.configure(api_key=settings.gemini_api_key)

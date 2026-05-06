@@ -64,6 +64,7 @@ export const API_ROUTES = {
     GENERATE_IMAGE: '/api/v1/images/generate/image',
     UPLOAD_URL: '/api/v1/images/upload-url',
     DESCRIBE_SCENE: '/api/v1/images/describe-scene',
+    STOCK_SEARCH: '/api/v1/images/stock',
     COLLECTIONS: '/api/v1/images/collections',
     BY_ID: (id: string) => `/api/v1/images/${id}`,
     SAVE: (id: string) => `/api/v1/images/${id}/save`,

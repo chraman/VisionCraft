@@ -23,9 +23,16 @@ export const uploadUrlSchema = z.object({
   contentType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
 });
 
-export const describeSceneSchema = z.object({
-  imageBase64: z.string().min(1),
-  mimeType: z.string().default('image/jpeg'),
+export const describeSceneSchema = z.union([
+  z.object({ imageBase64: z.string().min(1), mimeType: z.string().default('image/jpeg') }),
+  z.object({ imageUrl: z.string().url() }),
+]);
+
+export const stockSearchSchema = z.object({
+  source: z.enum(['unsplash', 'pexels']),
+  query: z.string().min(1).max(200),
+  page: z.coerce.number().int().min(1).default(1),
+  perPage: z.coerce.number().int().min(1).max(30).default(20),
 });
 
 export const listImagesSchema = z.object({
@@ -36,6 +43,7 @@ export const listImagesSchema = z.object({
 });
 
 export type DescribeSceneInput = z.infer<typeof describeSceneSchema>;
+export type StockSearchInput = z.infer<typeof stockSearchSchema>;
 export type GenerateTextInput = z.infer<typeof generateTextSchema>;
 export type GenerateImageInput = z.infer<typeof generateImageSchema>;
 export type UploadUrlInput = z.infer<typeof uploadUrlSchema>;

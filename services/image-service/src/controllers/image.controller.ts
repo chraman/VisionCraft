@@ -12,6 +12,7 @@ import {
   uploadUrlSchema,
   listImagesSchema,
   describeSceneSchema,
+  stockSearchSchema,
 } from '../schemas/image.schemas';
 import { AppError } from '@ai-platform/types';
 
@@ -238,14 +239,11 @@ export const imageController = {
       return;
     }
     const aiUrl = `${SERVICE_URLS.AI()}/generate/describe-scene`;
-    const response = await axios.post<{ prompt: string }>(
-      aiUrl,
-      {
-        image_base64: parsed.data.imageBase64,
-        mime_type: parsed.data.mimeType,
-      },
-      { timeout: 120_000 }
-    );
+    const aiBody =
+      'imageUrl' in parsed.data
+        ? { image_url: parsed.data.imageUrl }
+        : { image_base64: parsed.data.imageBase64, mime_type: parsed.data.mimeType };
+    const response = await axios.post<{ prompt: string }>(aiUrl, aiBody, { timeout: 120_000 });
     res.json({ success: true, data: { prompt: response.data.prompt }, requestId: requestId(res) });
   },
 
@@ -254,5 +252,55 @@ export const imageController = {
     const { id } = req.params as { id: string };
     await imageService.deleteImage(id, userId);
     res.json({ success: true, data: null, requestId: requestId(res) });
+  },
+
+  async stockSearch(req: Request, res: Response): Promise<void> {
+    const parsed = stockSearchSchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: parsed.error.issues[0]?.message ?? 'Invalid query',
+        },
+        requestId: requestId(res),
+      });
+      return;
+    }
+    const { source, query, page, perPage } = parsed.data;
+
+    if (source === 'unsplash') {
+      const r = await axios.get<{
+        results: { id: string; urls: { small: string; regular: string }; user: { name: string } }[];
+      }>('https://api.unsplash.com/search/photos', {
+        headers: { Authorization: `Client-ID ${process.env['UNSPLASH_ACCESS_KEY'] ?? ''}` },
+        params: { query, page, per_page: perPage },
+        timeout: 10_000,
+      });
+      const photos = r.data.results.map((p) => ({
+        id: p.id,
+        thumbUrl: p.urls.small,
+        fullUrl: p.urls.regular,
+        author: p.user.name,
+        source: 'unsplash' as const,
+      }));
+      res.json({ success: true, data: photos, requestId: requestId(res) });
+    } else {
+      const r = await axios.get<{
+        photos: { id: number; src: { medium: string; large: string }; photographer: string }[];
+      }>('https://api.pexels.com/v1/search', {
+        headers: { Authorization: process.env['PEXELS_API_KEY'] ?? '' },
+        params: { query, page, per_page: perPage },
+        timeout: 10_000,
+      });
+      const photos = r.data.photos.map((p) => ({
+        id: String(p.id),
+        thumbUrl: p.src.medium,
+        fullUrl: p.src.large,
+        author: p.photographer,
+        source: 'pexels' as const,
+      }));
+      res.json({ success: true, data: photos, requestId: requestId(res) });
+    }
   },
 };

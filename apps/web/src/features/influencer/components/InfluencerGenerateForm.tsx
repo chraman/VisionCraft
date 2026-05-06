@@ -9,7 +9,10 @@ import {
   getPresignedUploadUrl,
   uploadFileToS3,
   describeSceneImage,
+  describeSceneUrl,
 } from '../../../services/image.service';
+import type { StockPhoto } from '../../../services/image.service';
+import { StockPhotoPicker } from './StockPhotoPicker';
 import type { Influencer, GenerateInfluencerRequest } from '@ai-platform/types';
 
 const schema = z.object({
@@ -22,6 +25,7 @@ const schema = z.object({
 });
 
 type FormValues = z.infer<typeof schema>;
+type SceneMode = 'upload' | 'url' | 'browse';
 
 const ASPECT_RATIOS = ['1:1', '4:5', '9:16', '16:9'] as const;
 
@@ -63,10 +67,18 @@ export function InfluencerGenerateForm({
   const { data } = useInfluencers();
   const { mutation } = useInfluencerGeneration();
 
+  const [sceneMode, setSceneMode] = useState<SceneMode>('upload');
+  // upload mode
   const [sceneFile, setSceneFile] = useState<File | null>(null);
   const [scenePreview, setScenePreview] = useState<string | null>(null);
   const [isUploadingScene, setIsUploadingScene] = useState(false);
-  const [isDescribingScene, setIsDescribingScene] = useState(false);
+  const [isDescribingSceneFile, setIsDescribingSceneFile] = useState(false);
+  // url / browse mode
+  const [sceneUrl, setSceneUrl] = useState('');
+  const [sceneUrlPreview, setSceneUrlPreview] = useState<string | null>(null);
+  const [isDescribingUrl, setIsDescribingUrl] = useState(false);
+  const [selectedStock, setSelectedStock] = useState<StockPhoto | null>(null);
+  const [showStockPicker, setShowStockPicker] = useState(false);
 
   const influencers: Influencer[] = data?.pages.flatMap((p) => p.data) ?? [];
 
@@ -95,6 +107,61 @@ export function InfluencerGenerateForm({
   const selectedInfluencer = influencers.find((i) => i.id === influencerId) ?? null;
   const { label: strLabel, sub: strSub } = getStrengthLabel(referenceStrength);
 
+  const isDescribingScene = isDescribingSceneFile || isDescribingUrl;
+
+  function switchMode(mode: SceneMode) {
+    setSceneMode(mode);
+    // clear all scene state when switching
+    setSceneFile(null);
+    if (scenePreview) URL.revokeObjectURL(scenePreview);
+    setScenePreview(null);
+    setSceneUrl('');
+    setSceneUrlPreview(null);
+    setSelectedStock(null);
+    setIsDescribingSceneFile(false);
+    setIsDescribingUrl(false);
+  }
+
+  async function triggerDescribeUrl(url: string) {
+    if (!url) return;
+    setIsDescribingUrl(true);
+    try {
+      const prompt = await describeSceneUrl(url);
+      setValue('targetPrompt', prompt, { shouldValidate: true });
+    } catch {
+      // silent — user can type manually
+    } finally {
+      setIsDescribingUrl(false);
+    }
+  }
+
+  function handleUrlInput(value: string) {
+    setSceneUrl(value);
+    // Reset preview/describe when URL is cleared
+    if (!value) {
+      setSceneUrlPreview(null);
+    }
+  }
+
+  function handleUrlCommit() {
+    const trimmed = sceneUrl.trim();
+    if (!trimmed) return;
+    try {
+      new URL(trimmed); // validate
+      setSceneUrlPreview(trimmed);
+      void triggerDescribeUrl(trimmed);
+    } catch {
+      // not a valid URL yet
+    }
+  }
+
+  function handleStockSelect(photo: StockPhoto) {
+    setSelectedStock(photo);
+    setSceneUrl(photo.fullUrl);
+    setSceneUrlPreview(photo.thumbUrl);
+    void triggerDescribeUrl(photo.fullUrl);
+  }
+
   const onDropScene = useCallback(
     (accepted: File[]) => {
       const file = accepted[0];
@@ -102,7 +169,7 @@ export function InfluencerGenerateForm({
       setSceneFile(file);
       setScenePreview(URL.createObjectURL(file));
 
-      setIsDescribingScene(true);
+      setIsDescribingSceneFile(true);
       describeSceneImage(file)
         .then((prompt) => {
           setValue('targetPrompt', prompt, { shouldValidate: true });
@@ -111,7 +178,7 @@ export function InfluencerGenerateForm({
           // silent — user can type prompt manually
         })
         .finally(() => {
-          setIsDescribingScene(false);
+          setIsDescribingSceneFile(false);
         });
     },
     [setValue]
@@ -131,14 +198,21 @@ export function InfluencerGenerateForm({
       URL.revokeObjectURL(scenePreview);
       setScenePreview(null);
     }
-    setIsDescribingScene(false);
+    setIsDescribingSceneFile(false);
+  }
+
+  function clearSceneUrl() {
+    setSceneUrl('');
+    setSceneUrlPreview(null);
+    setSelectedStock(null);
+    setIsDescribingUrl(false);
   }
 
   async function onSubmit(values: FormValues) {
     onSubmitStart();
 
     let sceneImageUrl: string | undefined;
-    if (sceneFile) {
+    if (sceneMode === 'upload' && sceneFile) {
       setIsUploadingScene(true);
       try {
         const { uploadUrl, key } = await getPresignedUploadUrl(sceneFile.name, sceneFile.type);
@@ -151,6 +225,8 @@ export function InfluencerGenerateForm({
       } finally {
         setIsUploadingScene(false);
       }
+    } else if ((sceneMode === 'url' || sceneMode === 'browse') && sceneUrl) {
+      sceneImageUrl = sceneUrl;
     }
 
     const params: GenerateInfluencerRequest = {
@@ -169,6 +245,9 @@ export function InfluencerGenerateForm({
     });
   }
 
+  const hasSceneActive =
+    (sceneMode === 'upload' && !!sceneFile) ||
+    ((sceneMode === 'url' || sceneMode === 'browse') && !!sceneUrl);
   const isSubmitting = isUploadingScene || mutation.isPending || isDescribingScene;
 
   return (
@@ -357,10 +436,13 @@ export function InfluencerGenerateForm({
               · optional
             </span>
           </label>
-          {scenePreview && (
+          {hasSceneActive && (
             <button
               type="button"
-              onClick={clearSceneImage}
+              onClick={() => {
+                clearSceneImage();
+                clearSceneUrl();
+              }}
               className="text-[11px] text-muted-foreground transition-colors hover:text-foreground"
             >
               Remove
@@ -368,81 +450,264 @@ export function InfluencerGenerateForm({
           )}
         </div>
 
-        {scenePreview ? (
-          <div className="relative overflow-hidden rounded-[10px] border border-border">
-            <img src={scenePreview} alt="Scene reference" className="h-36 w-full object-cover" />
-            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-3 py-2.5">
-              <div className="flex items-center gap-1.5 text-[11px] font-medium text-white">
+        {/* Mode tab bar */}
+        <div className="mb-3 flex gap-1 rounded-[8px] bg-muted p-[3px]">
+          {(['upload', 'url', 'browse'] as SceneMode[]).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => switchMode(m)}
+              className={`flex-1 rounded-[6px] py-1.5 text-[11px] font-semibold transition-all ${
+                sceneMode === m
+                  ? 'bg-background text-foreground shadow-[0_1px_2px_rgba(0,0,0,.06)]'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {m === 'upload' ? '↑ Upload' : m === 'url' ? '🔗 URL' : '🖼 Browse'}
+            </button>
+          ))}
+        </div>
+
+        {/* Upload mode */}
+        {sceneMode === 'upload' &&
+          (scenePreview ? (
+            <div className="relative overflow-hidden rounded-[10px] border border-border">
+              <img src={scenePreview} alt="Scene reference" className="h-36 w-full object-cover" />
+              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-3 py-2.5">
+                <div className="flex items-center gap-1.5 text-[11px] font-medium text-white">
+                  <svg
+                    width={11}
+                    height={11}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={1.8}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                    <polyline points="9 22 9 12 15 12 15 22" />
+                  </svg>
+                  Scene composition · blended 80% with influencer profile
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={clearSceneImage}
+                className="absolute right-2 top-2 rounded-full bg-black/60 p-1.5 text-white hover:bg-black/80"
+              >
                 <svg
-                  width={11}
-                  height={11}
+                  width={12}
+                  height={12}
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth={1.8}
+                  strokeWidth={2.5}
+                >
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          ) : (
+            <div
+              {...getRootProps()}
+              className={`flex cursor-pointer items-center gap-3 rounded-[10px] border-2 border-dashed px-4 py-3.5 transition-colors ${
+                isDragActive
+                  ? 'border-primary bg-primary/5'
+                  : 'border-border hover:border-primary/40 hover:bg-tint'
+              }`}
+            >
+              <input {...getInputProps()} />
+              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[8px] bg-muted text-muted-foreground">
+                <svg
+                  width={16}
+                  height={16}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.5}
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 >
-                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                  <polyline points="9 22 9 12 15 12 15 22" />
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                  <circle cx="8.5" cy="8.5" r="1.5" />
+                  <polyline points="21 15 16 10 5 21" />
                 </svg>
-                Scene composition · blended 80% with influencer profile
+              </div>
+              <div className="min-w-0">
+                <div className="text-[12.5px] font-medium">
+                  {isDragActive ? 'Drop scene image here' : 'Add a scene reference image'}
+                </div>
+                <div className="mt-0.5 text-[11px] text-muted-foreground">
+                  Pose, setting, lighting reference · blended with influencer profile for
+                  composition
+                </div>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={clearSceneImage}
-              className="absolute right-2 top-2 rounded-full bg-black/60 p-1.5 text-white hover:bg-black/80"
-            >
-              <svg
-                width={12}
-                height={12}
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2.5}
-              >
-                <path d="M18 6L6 18M6 6l12 12" />
-              </svg>
-            </button>
+          ))}
+
+        {/* URL mode */}
+        {sceneMode === 'url' && (
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-2">
+              <input
+                type="url"
+                value={sceneUrl}
+                onChange={(e) => handleUrlInput(e.target.value)}
+                onBlur={handleUrlCommit}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleUrlCommit();
+                  }
+                }}
+                placeholder="https://example.com/photo.jpg"
+                className="flex-1 rounded-[8px] border border-input bg-background px-3 py-2 text-[13px] placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+              />
+              {sceneUrl && (
+                <button
+                  type="button"
+                  onClick={clearSceneUrl}
+                  className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[8px] border border-border text-muted-foreground hover:text-foreground"
+                >
+                  <svg
+                    width={13}
+                    height={13}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2.5}
+                  >
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+            {sceneUrlPreview && (
+              <div className="relative overflow-hidden rounded-[8px] border border-border">
+                <img
+                  src={sceneUrlPreview}
+                  alt="Scene reference preview"
+                  className="h-32 w-full object-cover"
+                  onError={() => setSceneUrlPreview(null)}
+                />
+                {isDescribingUrl && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                    <div className="flex items-center gap-2 rounded-full bg-background/90 px-3 py-1.5 text-[12px] font-medium text-primary shadow-sm">
+                      <svg
+                        className="animate-spin"
+                        width={12}
+                        height={12}
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={2.5}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M21 12a9 9 0 1 1-3-6.7" />
+                      </svg>
+                      Analyzing…
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {!sceneUrlPreview && (
+              <p className="text-[11px] text-muted-foreground">
+                Paste any public image URL — press Enter or click outside to preview
+              </p>
+            )}
           </div>
-        ) : (
-          <div
-            {...getRootProps()}
-            className={`flex cursor-pointer items-center gap-3 rounded-[10px] border-2 border-dashed px-4 py-3.5 transition-colors ${
-              isDragActive
-                ? 'border-primary bg-primary/5'
-                : 'border-border hover:border-primary/40 hover:bg-tint'
-            }`}
-          >
-            <input {...getInputProps()} />
-            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[8px] bg-muted text-muted-foreground">
-              <svg
-                width={16}
-                height={16}
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={1.5}
-                strokeLinecap="round"
-                strokeLinejoin="round"
+        )}
+
+        {/* Browse mode */}
+        {sceneMode === 'browse' && (
+          <div className="flex flex-col gap-2">
+            {sceneUrlPreview ? (
+              <div className="relative overflow-hidden rounded-[8px] border border-border">
+                <img
+                  src={sceneUrlPreview}
+                  alt="Selected stock photo"
+                  className="h-32 w-full object-cover"
+                />
+                {selectedStock && (
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent px-2.5 py-2">
+                    <div className="text-[10.5px] text-white/80">
+                      {selectedStock.author} · {selectedStock.source}
+                    </div>
+                  </div>
+                )}
+                {isDescribingUrl && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                    <div className="flex items-center gap-2 rounded-full bg-background/90 px-3 py-1.5 text-[12px] font-medium text-primary shadow-sm">
+                      <svg
+                        className="animate-spin"
+                        width={12}
+                        height={12}
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={2.5}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M21 12a9 9 0 1 1-3-6.7" />
+                      </svg>
+                      Analyzing…
+                    </div>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearSceneUrl();
+                    setShowStockPicker(true);
+                  }}
+                  className="absolute right-2 top-2 rounded-full bg-black/60 p-1.5 text-white hover:bg-black/80"
+                >
+                  <svg
+                    width={12}
+                    height={12}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2.5}
+                  >
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowStockPicker(true)}
+                className="flex items-center justify-center gap-2 rounded-[10px] border-2 border-dashed border-border py-5 text-[12.5px] font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:bg-tint hover:text-foreground"
               >
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                <circle cx="8.5" cy="8.5" r="1.5" />
-                <polyline points="21 15 16 10 5 21" />
-              </svg>
-            </div>
-            <div className="min-w-0">
-              <div className="text-[12.5px] font-medium">
-                {isDragActive ? 'Drop scene image here' : 'Add a scene reference image'}
-              </div>
-              <div className="mt-0.5 text-[11px] text-muted-foreground">
-                Pose, setting, lighting reference · blended with influencer profile for composition
-              </div>
-            </div>
+                <svg
+                  width={15}
+                  height={15}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <path d="m3 9 5-5 4 4 4-6 5 6" />
+                  <circle cx="8.5" cy="8.5" r="1.5" />
+                </svg>
+                Browse Unsplash &amp; Pexels
+              </button>
+            )}
           </div>
         )}
       </div>
+
+      {showStockPicker && (
+        <StockPhotoPicker onSelect={handleStockSelect} onClose={() => setShowStockPicker(false)} />
+      )}
 
       {/* Reference strength slider */}
       <div className="rounded-[10px] border border-border bg-tint p-3.5">
@@ -484,7 +749,7 @@ export function InfluencerGenerateForm({
           <div className="text-[12px] font-semibold text-primary">{strLabel}</div>
           <div className="mt-0.5 text-[11.5px] leading-relaxed text-muted-foreground">{strSub}</div>
         </div>
-        {sceneFile && (
+        {hasSceneActive && (
           <div className="mt-2.5 flex items-start gap-1.5 rounded-[7px] bg-amber-50 px-2.5 py-2 text-[11px] text-amber-700">
             <svg
               className="mt-px flex-shrink-0"

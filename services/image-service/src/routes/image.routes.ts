@@ -26,6 +26,8 @@ imageRouter.get('/jobs/:id', asyncHandler(imageController.getJob));
 // SSE — not wrapped in asyncHandler; manages its own lifecycle
 imageRouter.get('/jobs/:id/events', imageController.streamJobEvents);
 
+imageRouter.get('/stock', asyncHandler(imageController.stockSearch));
+
 imageRouter.get('/', asyncHandler(imageController.listImages));
 
 imageRouter.post('/:id/save', asyncHandler(imageController.saveImage));

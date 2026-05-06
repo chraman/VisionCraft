@@ -77,6 +77,35 @@ export async function describeSceneImage(file: File): Promise<string> {
   return unwrapResponse(res).prompt;
 }
 
+export async function describeSceneUrl(imageUrl: string): Promise<string> {
+  const res = await apiClient.post<{ success: true; data: { prompt: string }; requestId: string }>(
+    API_ROUTES.IMAGES.DESCRIBE_SCENE,
+    { imageUrl }
+  );
+  return unwrapResponse(res).prompt;
+}
+
+export interface StockPhoto {
+  id: string;
+  thumbUrl: string;
+  fullUrl: string;
+  author: string;
+  source: 'unsplash' | 'pexels';
+}
+
+export async function searchStockPhotos(
+  source: 'unsplash' | 'pexels',
+  query: string,
+  page = 1,
+  perPage = 20
+): Promise<StockPhoto[]> {
+  const res = await apiClient.get<{ success: true; data: StockPhoto[]; requestId: string }>(
+    API_ROUTES.IMAGES.STOCK_SEARCH,
+    { params: { source, query, page, perPage } }
+  );
+  return unwrapResponse(res);
+}
+
 export async function getSavedImages(
   params: CursorPaginationParams = {}
 ): Promise<PaginatedResponse<Image>> {
